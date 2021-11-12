@@ -1,0 +1,19 @@
+[package]
+name = "shit-chat-says"
+version = "0.1.0"
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[[bin]]
+name = "train"
+path = "src/train/main.rs"
+
+[[bin]]
+name = "gen"
+path = "src/gen/main.rs"
+
+[dependencies]
+markov = "1.1.0"
+anyhow = "1.0.45"
+rustyline = "9.0.0"
