@@ -13,7 +13,13 @@ path = "src/train/main.rs"
 name = "gen"
 path = "src/gen/main.rs"
 
+[[bin]]
+name = "bot"
+path = "src/bot/main.rs"
+
 [dependencies]
 markov = "1.1.0"
 anyhow = "1.0.45"
 rustyline = "9.0.0"
+tokio = { verison = "1.13.0", features = ["full"] }
+twitch = { git = "https://github.com/jprochazk/twitch-rs.git" }
