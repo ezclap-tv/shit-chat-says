@@ -50,7 +50,7 @@ async fn run(config: CollectorConfig) -> Result<(), anyhow::Error> {
                 _ => ()
             },
             Err(err) => {
-                panic!("{}", err);
+                log::error!("{}", err);
             }
         }
     }
