@@ -1207,7 +1207,7 @@ dependencies = [
 [[package]]
 name = "twitch"
 version = "0.0.1"
-source = "git+https://github.com/optimalstrategy/twitch-rs.git?branch=add-extendsub#f1c93c5f16489145365e221fb4918255695cbc62"
+source = "git+https://github.com/jprochazk/twitch-rs.git#ee296ed181bbe8c8d6798365acb00208871f4d49"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1229,7 +1229,7 @@ dependencies = [
 [[package]]
 name = "twitch_getters"
 version = "0.0.1"
-source = "git+https://github.com/optimalstrategy/twitch-rs.git?branch=add-extendsub#f1c93c5f16489145365e221fb4918255695cbc62"
+source = "git+https://github.com/jprochazk/twitch-rs.git#ee296ed181bbe8c8d6798365acb00208871f4d49"
 dependencies = [
  "proc-macro2",
  "quote",
