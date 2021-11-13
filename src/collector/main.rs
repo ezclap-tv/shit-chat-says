@@ -38,17 +38,20 @@ async fn run(config: Config) -> Result<()> {
                 Message::Ping(ping) => conn.sender.pong(ping.arg()).await?,
                 Message::Privmsg(message) => {
                   let (channel, login, text) = (message.channel(), message.user.login(), message.text());
+                  let time = chrono::Utc::now().format("%T");
                   log::info!("[{channel}] {login}: {text}");
                   let mut sink = sinks.get_mut(channel).unwrap();
-                  write!(&mut sink, "{channel},{login},{text}\n")?;
+                  write!(&mut sink, "{channel},{time},{login},{text}\n")?;
                 },
                 _ => ()
             },
-            Err(err) => {
-                log::error!("{}", err);
-            }
+            Err(err) => log::error!("{}", err)
         }
     }
+  }
+
+  for sink in sinks.values_mut() {
+    sink.flush()?;
   }
 
   Ok(())

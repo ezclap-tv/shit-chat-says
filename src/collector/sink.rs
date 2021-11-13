@@ -9,9 +9,8 @@ use std::{
 pub struct DailyLogSink {
   log_file_prefix: String,
   log_dir: PathBuf,
-  bytes_written: usize,
   buf_size: usize,
-  current_date: Date<Utc>,
+  date: Date<Utc>,
   file: BufWriter<std::fs::File>,
 }
 
@@ -24,15 +23,18 @@ impl DailyLogSink {
     let file = fs::OpenOptions::new()
       .create(true)
       .append(true)
-      .open(log_dir.join(format!("{log_file_prefix}-{date}.log")))
+      .open(log_dir.join(format!(
+        "{prefix}-{date}.log",
+        prefix = log_file_prefix,
+        date = date.format("%F")
+      )))
       .map(|file| BufWriter::with_capacity(buf_size, file))?;
 
     Ok(DailyLogSink {
       log_file_prefix,
       log_dir,
-      bytes_written: 0,
       buf_size,
-      current_date: date,
+      date,
       file,
     })
   }
@@ -41,21 +43,25 @@ impl DailyLogSink {
 impl Write for DailyLogSink {
   fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
     // ensure buffer never reaches `buf_size`
-    if self.bytes_written + buf.len() >= self.buf_size {
+    if self.file.buffer().len() + buf.len() >= self.buf_size {
       self.file.flush()?;
     }
     // rotate file every day
-    let date = Utc::today();
-    if date.signed_duration_since(self.current_date).num_days() > 0 {
+    let today = Utc::today();
+    if today.signed_duration_since(self.date).num_days() > 0 {
+      self.date = today;
       self.file.flush()?;
       self.file = fs::OpenOptions::new()
         .create(true)
         .append(true)
-        .open(self.log_dir.join(format!("{}-{}.log", self.log_file_prefix, date)))
+        .open(self.log_dir.join(format!(
+          "{prefix}-{date}.log",
+          prefix = self.log_file_prefix,
+          date = self.date.format("%F")
+        )))
         .map(|file| BufWriter::with_capacity(self.buf_size, file))?;
     }
-    // actually write
-    self.bytes_written += buf.len();
+    // then actually write
     self.file.write(buf)
   }
 
