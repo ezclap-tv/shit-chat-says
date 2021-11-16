@@ -29,23 +29,23 @@ async fn run(config: Config) -> Result<()> {
 
   loop {
     tokio::select! {
-        _ = tokio::signal::ctrl_c() => {
-            log::info!("CTRL-C");
-            break;
+      _ = tokio::signal::ctrl_c() => {
+        log::info!("CTRL-C");
+        break;
+      },
+      result = conn.reader.next() => match result {
+        Ok(message) => match message {
+          Message::Ping(ping) => conn.sender.pong(ping.arg()).await?,
+          Message::Privmsg(message) => {
+            let (channel, login, text) = (message.channel(), message.user.login(), message.text());
+            log::info!("[{channel}] {login}: {text}");
+            let mut sink = sinks.get_mut(channel).unwrap();
+            write!(&mut sink, "{login},{text}\n")?;
+          },
+          _ => ()
         },
-        result = conn.reader.next() => match result {
-            Ok(message) => match message {
-                Message::Ping(ping) => conn.sender.pong(ping.arg()).await?,
-                Message::Privmsg(message) => {
-                  let (channel, login, text) = (message.channel(), message.user.login(), message.text());
-                  log::info!("[{channel}] {login}: {text}");
-                  let mut sink = sinks.get_mut(channel).unwrap();
-                  write!(&mut sink, "{login},{text}\n")?;
-                },
-                _ => ()
-            },
-            Err(err) => log::error!("{}", err)
-        }
+        Err(err) => log::error!("{}", err)
+      }
     }
   }
 
@@ -60,8 +60,8 @@ const DEFAULT_CONFIG_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "\\collect
 
 #[tokio::main]
 async fn main() -> Result<()> {
-  if std::env::var("RUST_LOG").is_err() {
-    std::env::set_var("RUST_LOG", "INFO");
+  if env::var("RUST_LOG").is_err() {
+    env::set_var("RUST_LOG", "INFO");
   }
   env_logger::try_init()?;
 
