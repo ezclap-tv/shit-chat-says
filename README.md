@@ -33,8 +33,6 @@ Either press enter to get completely random messages, or some keyword to generat
 
 It will create and write to a `CHANNEL-YYYY-MM-DD.log` file, per-channel, rotating every day. The date is always in UTC.
 
-**NOTE:** Currently, there is no way to incrementally re-train the bot on the collected logs. Progress on this is tracked [here](https://github.com/jprochazk/shit-chat-says/issues/3).
-
 #### Chat bot
 
 Requires `model.yaml` to be present in `/data`

@@ -1,3 +1,5 @@
+// Used to convert chatterino logs to csv
+
 (async () => {
   const fs = require("fs");
   const path = require("path");
@@ -54,7 +56,6 @@
   }
 
   const re = /\[(\d+:\d+:\d+)\]  ([^\s]+): (.*)/;
-  const db = [];
 
   for (const file of rwalkfs("./data")) {
     if (path.extname(file) !== ".log") continue;
@@ -63,28 +64,16 @@
       path.basename(file, path.extname(file)),
       "-"
     );
+    const out = fs.createWriteStream(path.join("logs", path.basename(file)));
     await lines(fs.createReadStream(file), (line) => {
       if (line.startsWith("#")) {
         const parts = line.split(" ");
         tz = parts[parts.length - 1];
       } else {
         const matches = line.match(re);
-        if (matches) {
-          db.push([
-            channel,
-            `${date} ${matches[1]} ${tz}`,
-            matches[2],
-            matches[3],
-          ]);
-        }
+        if (matches) out.write(`${matches[2]},${matches[3]}\n`);
       }
     });
+    out.close();
   }
-
-  const out = fs.createWriteStream("data/data.csv");
-  out.write(`ch,date,user,msg\n`);
-  for (let i = 0; i < db.length; ++i) {
-    out.write(db[i].join(",") + (i < db.length - 1 ? "\n" : ""));
-  }
-  out.close();
 })();
