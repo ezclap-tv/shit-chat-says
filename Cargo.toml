@@ -17,6 +17,9 @@ path = "src/gen/main.rs"
 name = "collector"
 path = "src/collector/main.rs"
 
+[[bin]]
+name = "chat"
+path = "src/chat/main.rs"
 
 [dependencies]
 markov = "1.1.0"

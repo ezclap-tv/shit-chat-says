@@ -3,3 +3,4 @@
 data/**/*
 /logs/
 collector.json
+chat.json
