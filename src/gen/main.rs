@@ -7,7 +7,7 @@ const CARGO_MANIFEST_DIR: &str = env!("CARGO_MANIFEST_DIR");
 fn main() -> Result<()> {
   let model_dir = std::env::var("SCS_MODEL_PATH")
     .map(PathBuf::from)
-    .unwrap_or_else(|_| PathBuf::from(CARGO_MANIFEST_DIR).join("data").join("model.yaml"));
+    .unwrap_or_else(|_| PathBuf::from(CARGO_MANIFEST_DIR).join("models").join("model.yaml"));
 
   println!("Loading model from {}...", model_dir.display());
   let chain = markov::Chain::<String>::load(model_dir)?;

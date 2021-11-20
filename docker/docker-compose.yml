@@ -2,6 +2,7 @@ version: "3.7"
 
 services:
   collector:
+    restart: always
     build:
       context: ..
       dockerfile: ./docker/Dockerfile
@@ -12,6 +13,7 @@ services:
       - ../logs:/logs
 
   chat:
+    restart: always
     build:
       context: ..
       dockerfile: ./docker/Dockerfile
@@ -19,9 +21,9 @@ services:
       - /binaries/chat
     command: /config/chat.json
     environment:
-      - SCS_MODEL_PATH=/data/model.yaml
+      - SCS_MODEL_PATH=/models/model.yaml
     volumes:
-      - ../data:/data
+      - ../models:/models
 
   train:
     profiles:
@@ -33,7 +35,7 @@ services:
       - /binaries/train
     environment:
       - SCS_INPUT_DIR=/logs
-      - SCS_MODEL_PATH=/data/model.yaml
+      - SCS_MODEL_PATH=/models/model.yaml
     volumes:
       - ../logs:/logs
-      - ../data:/data
+      - ../models:/models

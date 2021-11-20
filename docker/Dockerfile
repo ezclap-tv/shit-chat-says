@@ -12,7 +12,7 @@ RUN mkdir -p $HOME/binaries
 RUN chown rust:rust -R $HOME
 
 
-# Copy the code and Cargo metadata files into the image
+# Copy the code and Cargo metamodels files into the image
 COPY ./src        $HOME/app/src
 COPY ./Cargo.lock $HOME/app/Cargo.lock
 COPY ./Cargo.toml $HOME/app/Cargo.toml

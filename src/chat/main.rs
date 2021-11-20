@@ -76,7 +76,7 @@ async fn main() -> Result<()> {
   if config.model_path.as_os_str().is_empty() {
     config.model_path = std::env::var("SCS_MODEL_PATH")
       .map(PathBuf::from)
-      .unwrap_or_else(|_| PathBuf::from(CARGO_MANIFEST_DIR).join("data").join("model.yaml"));
+      .unwrap_or_else(|_| PathBuf::from(CARGO_MANIFEST_DIR).join("models").join("model.yaml"));
   }
 
   log::info!("{config:?}");

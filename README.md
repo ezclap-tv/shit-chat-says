@@ -27,16 +27,16 @@ Markov chain that can be easily trained on Chatterino logs, and a prompt to gene
 #### Training
 
 1. Grab some Chatterino logs from your favorite chat(s)
-2. Dump them under `/data`
+2. Dump them under `/models`
 3. `node clean.js`
 4. `cargo run --release --bin train`
 
-Generates `/data/model.yaml`. You should compress this file if you plan to deploy it anywhere, as
+Generates `/models/model.yaml`. You should compress this file if you plan to deploy it anywhere, as
 it is mostly whitespace.
 
 #### Command-line prompt
 
-Requires `model.yaml` to be present in `/data`
+Requires `model.yaml` to be present in `/models`
 
 1. `cargo run --release --bin gen`
 
@@ -57,7 +57,7 @@ It will create and write to a `CHANNEL-YYYY-MM-DD.log` file, per-channel, rotati
 
 #### Chat bot
 
-Requires `model.yaml` to be present in `/data`
+Requires `model.yaml` to be present in `/models`
 
 1. `cp chat.example.json chat.json`
 2. Fill in the config values

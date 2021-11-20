@@ -29,7 +29,7 @@ fn main() -> Result<()> {
     .unwrap_or_else(|_| PathBuf::from(CARGO_MANIFEST_DIR).join("logs"));
   let mut output = std::env::var("SCS_MODEL_PATH")
     .map(PathBuf::from)
-    .unwrap_or_else(|_| PathBuf::from(CARGO_MANIFEST_DIR).join("data").join("model.yaml"));
+    .unwrap_or_else(|_| PathBuf::from(CARGO_MANIFEST_DIR).join("models").join("model.yaml"));
 
   println!("Training...");
   let mut chain = markov::Chain::<String>::of_order(2);
