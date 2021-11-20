@@ -1,0 +1,39 @@
+version: "3.7"
+
+services:
+  collector:
+    build:
+      context: ..
+      dockerfile: ./docker/Dockerfile
+    entrypoint:
+      - /binaries/collector
+    command: /config/collector.json
+    volumes:
+      - ../logs:/logs
+
+  chat:
+    build:
+      context: ..
+      dockerfile: ./docker/Dockerfile
+    entrypoint:
+      - /binaries/chat
+    command: /config/chat.json
+    environment:
+      - SCS_MODEL_PATH=/data/model.yaml
+    volumes:
+      - ../data:/data
+
+  train:
+    profiles:
+      - training
+    build:
+      context: ..
+      dockerfile: ./docker/Dockerfile
+    entrypoint:
+      - /binaries/train
+    environment:
+      - SCS_INPUT_DIR=/logs
+      - SCS_MODEL_PATH=/data/model.yaml
+    volumes:
+      - ../logs:/logs
+      - ../data:/data

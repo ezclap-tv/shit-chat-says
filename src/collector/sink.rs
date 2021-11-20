@@ -22,7 +22,8 @@ fn open_log_file(dir: &Path, prefix: &str) -> io::Result<File> {
 }
 
 impl DailyLogSink {
-  pub fn new(log_dir: PathBuf, log_file_prefix: String, buf_size: usize) -> io::Result<Self> {
+  pub fn new(mut log_dir: PathBuf, log_file_prefix: String, buf_size: usize) -> io::Result<Self> {
+    log_dir = log_dir.join(&log_file_prefix);
     if !log_dir.exists() {
       fs::create_dir_all(&log_dir)?;
     }

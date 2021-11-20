@@ -4,14 +4,14 @@ mod config;
 
 use anyhow::Result;
 use config::Config;
-use std::env;
+use std::{env, path::PathBuf};
 use twitch::Message;
 
 type Model = markov::Chain<String>;
 
 async fn run(config: Config) -> Result<()> {
   log::info!("Loading model");
-  let model = Model::load(MODEL_DIR)?;
+  let model = Model::load(config.model_path.clone())?;
 
   log::info!("Connecting to Twitch");
   let mut conn = twitch::connect(config.clone().into()).await.unwrap();
@@ -57,8 +57,7 @@ async fn run(config: Config) -> Result<()> {
   }
 }
 
-const MODEL_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "\\data\\model.yaml");
-const DEFAULT_CONFIG_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "\\chat.json");
+const CARGO_MANIFEST_DIR: &str = env!("CARGO_MANIFEST_DIR");
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -67,7 +66,19 @@ async fn main() -> Result<()> {
   }
   env_logger::try_init()?;
 
-  let config = Config::load(&env::args().nth(1).unwrap_or_else(|| String::from(DEFAULT_CONFIG_PATH)))?;
+  let mut config = Config::load(
+    &env::args()
+      .nth(1)
+      .map(PathBuf::from)
+      .unwrap_or_else(|| PathBuf::from(CARGO_MANIFEST_DIR).join("config").join("chat.json")),
+  )?;
+
+  if config.model_path.as_os_str().is_empty() {
+    config.model_path = std::env::var("SCS_MODEL_PATH")
+      .map(PathBuf::from)
+      .unwrap_or_else(|_| PathBuf::from(CARGO_MANIFEST_DIR).join("data").join("model.yaml"));
+  }
+
   log::info!("{config:?}");
 
   run(config).await

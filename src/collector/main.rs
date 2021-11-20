@@ -56,7 +56,7 @@ async fn run(config: Config) -> Result<()> {
   Ok(())
 }
 
-const DEFAULT_CONFIG_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "\\collector.json");
+static CARGO_MANIFEST_DIR: &str = env!("CARGO_MANIFEST_DIR");
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -65,7 +65,12 @@ async fn main() -> Result<()> {
   }
   env_logger::try_init()?;
 
-  let config = self::Config::load(&env::args().nth(1).unwrap_or_else(|| String::from(DEFAULT_CONFIG_PATH)))?;
+  let config = self::Config::load(
+    &env::args()
+      .nth(1)
+      .map(std::path::PathBuf::from)
+      .unwrap_or_else(|| std::path::PathBuf::from(CARGO_MANIFEST_DIR).join("collector.json")),
+  )?;
   log::info!("{config:?}");
 
   run(config).await

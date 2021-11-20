@@ -1,7 +1,0 @@
-{
-  "channels": [
-    "<your_channel_name>",
-    { "name": "<channel_with_different_buffer_size>", "buffer": 2048 }
-  ],
-  "output_directory": "logs"
-}
