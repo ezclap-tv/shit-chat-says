@@ -65,12 +65,11 @@ async fn main() -> Result<()> {
   }
   env_logger::try_init()?;
 
-  let config = self::Config::load(
-    &env::args()
-      .nth(1)
-      .map(std::path::PathBuf::from)
-      .unwrap_or_else(|| std::path::PathBuf::from(CARGO_MANIFEST_DIR).join("collector.json")),
-  )?;
+  let config = self::Config::load(&env::args().nth(1).map(std::path::PathBuf::from).unwrap_or_else(|| {
+    std::path::PathBuf::from(CARGO_MANIFEST_DIR)
+      .join("config")
+      .join("collector.json")
+  }))?;
   log::info!("{config:?}");
 
   run(config).await
