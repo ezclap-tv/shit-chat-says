@@ -4,7 +4,7 @@ Markov chain that can be easily trained on Chatterino logs, and a prompt to gene
 
 ### Usage
 
-#### Docker
+#### With Docker
 
 Requires `docker-compose` v1.28+
 
@@ -38,7 +38,9 @@ $ docker-compose -f docker/docker-compose.yml run --rm collector
 $ docker-compose -f docker/docker-compose.yml up
 ```
 
-#### Log collector
+#### Without Docker
+
+##### Log collector
 
 1. `cp config/collector.example.json config/collector.json`
 2. Fill in the config values
@@ -51,7 +53,7 @@ $ docker-compose -f docker/docker-compose.yml up
 
 It will write to a `CHANNEL-YYYY-MM-DD.log` file, per-channel, rotating every day. The date is always in UTC.
 
-#### Training
+##### Training
 
 1. Grab some Chatterino logs from your favorite chat(s)
 2. Dump them under `/data`
@@ -60,7 +62,7 @@ It will write to a `CHANNEL-YYYY-MM-DD.log` file, per-channel, rotating every da
 
 Generates `/models/model.yaml`
 
-#### Command-line prompt
+##### Command-line prompt
 
 Requires `model.yaml` to be present in `/models`
 
@@ -68,7 +70,7 @@ Requires `model.yaml` to be present in `/models`
 
 Either press enter to get completely random messages, or a word to generate the remainder of the message.
 
-#### Chat bot
+##### Chat bot
 
 Requires `model.yaml` to be present in `/models`
 
