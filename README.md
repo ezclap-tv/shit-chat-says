@@ -6,45 +6,41 @@ Markov chain that can be easily trained on Chatterino logs, and a prompt to gene
 
 #### Docker
 
+Requires `docker-compose` v1.28+
+
+Not required, but recommended: Use BuildKit
+
+```bash
+$ # bash
+$ COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 <command>
+```
+
+```ps1
+PS > # powershell
+PS > $env:COMPOSE_DOCKER_CLI_BUILD=1; $env:DOCKER_BUILDKIT=1; <command>
+```
+
 1. Build the base image
 
-   ```bash
-     $ COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 docker-compose -f docker/docker-compose.yml build
-   ```
+```bash
+$ docker-compose -f docker/docker-compose.yml build
+```
 
 2. Run the binary you want (todo: start all services independently instead)
 
-   ```bash
-   $ COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 docker-compose -f docker/docker-compose.yml run --rm collector
-   ```
+```bash
+$ docker-compose -f docker/docker-compose.yml run --rm collector
+```
 
 3. To run multiple services at the same time, use the command below (add `-d` to run it in the background)
 
-   ```bash
-   $ COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1  docker-compose -f docker/docker-compose.yml up
-   ```
-
-#### Training
-
-1. Grab some Chatterino logs from your favorite chat(s)
-2. Dump them under `/models`
-3. `node clean.js`
-4. `cargo run --release --bin train`
-
-Generates `/models/model.yaml`. You should compress this file if you plan to deploy it anywhere, as
-it is mostly whitespace.
-
-#### Command-line prompt
-
-Requires `model.yaml` to be present in `/models`
-
-1. `cargo run --release --bin gen`
-
-Either press enter to get completely random messages, or some keyword to generate the remainder of the message.
+```bash
+$ docker-compose -f docker/docker-compose.yml up
+```
 
 #### Log collector
 
-1. `cp collector.example.json collector.json`
+1. `cp config/collector.example.json config/collector.json`
 2. Fill in the config values
 
 - `channels` tells the collector which channels to join
@@ -53,13 +49,30 @@ Either press enter to get completely random messages, or some keyword to generat
 
 3. `cargo run --release --bin collector`
 
-It will create and write to a `CHANNEL-YYYY-MM-DD.log` file, per-channel, rotating every day. The date is always in UTC.
+It will write to a `CHANNEL-YYYY-MM-DD.log` file, per-channel, rotating every day. The date is always in UTC.
+
+#### Training
+
+1. Grab some Chatterino logs from your favorite chat(s)
+2. Dump them under `/data`
+3. `node clean.js`
+4. `cargo run --release --bin train`
+
+Generates `/models/model.yaml`
+
+#### Command-line prompt
+
+Requires `model.yaml` to be present in `/models`
+
+1. `cargo run --release --bin gen`
+
+Either press enter to get completely random messages, or a word to generate the remainder of the message.
 
 #### Chat bot
 
 Requires `model.yaml` to be present in `/models`
 
-1. `cp chat.example.json chat.json`
+1. `cp config/chat.example.json config/chat.json`
 2. Fill in the config values
 
 - `login` is the username you use to login to the bot account
