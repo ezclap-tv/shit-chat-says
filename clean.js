@@ -4,6 +4,12 @@
   const fs = require("fs");
   const path = require("path");
 
+  function ensure(dir) {
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+  }
+
   function* rwalkfs(root) {
     for (const item of fs.readdirSync(root)) {
       const fp = path.join(root, item);
@@ -16,7 +22,10 @@
   }
 
   /** @returns {[string, string | null]} */
-  function splitOnce(/** @type {string} */ string, /** @type {string} */ needle) {
+  function splitOnce(
+    /** @type {string} */ string,
+    /** @type {string} */ needle
+  ) {
     let idx = string.indexOf(needle);
     if (idx === -1) {
       return [string, null];
@@ -30,7 +39,7 @@
   ) {
     return new Promise((resolve) => {
       let line = "";
-      stream.on("models", (chunk) => {
+      stream.on("data", (chunk) => {
         let lf = chunk.indexOf("\n");
         while (lf !== -1) {
           line += chunk.slice(0, chunk[lf - 1] === "\r" ? lf - 1 : lf);
@@ -54,19 +63,15 @@
 
   const re = /\[(\d+:\d+:\d+)\]  ([^\s]+): (.*)/;
 
-  for (const file of rwalkfs("./models")) {
+  for (const file of rwalkfs("./data")) {
     if (path.extname(file) !== ".log") continue;
-    let tz = "UTC";
-    const [channel, date] = splitOnce(path.basename(file, path.extname(file)), "-");
-    const out = fs.createWriteStream(path.join("logs", path.basename(file)));
+    const [channel] = path.basename(file, path.extname(file)).split("-");
+    const base = path.join("logs", channel);
+    ensure(base);
+    const out = fs.createWriteStream(path.join(base, path.basename(file)));
     await lines(fs.createReadStream(file), (line) => {
-      if (line.startsWith("#")) {
-        const parts = line.split(" ");
-        tz = parts[parts.length - 1];
-      } else {
-        const matches = line.match(re);
-        if (matches) out.write(`${matches[2]},${matches[3]}\n`);
-      }
+      const matches = line.match(re);
+      if (matches) out.write(`${matches[2]},${matches[3]}\n`);
     });
     out.close();
   }
