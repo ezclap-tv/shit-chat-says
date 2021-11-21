@@ -1,11 +1,12 @@
 use anyhow::Result;
+use chrono::Utc;
 use std::env;
 use std::ffi::OsStr;
 use std::fs;
+use std::path::PathBuf;
 use walkdir::WalkDir;
 
-const INPUT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "\\logs");
-const OUTPUT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "\\data\\model.yaml");
+const CARGO_MANIFEST_DIR: &str = env!("CARGO_MANIFEST_DIR");
 
 fn split_line(line: &str) -> Option<(&str, &str)> {
   if !line.trim().is_empty() {
@@ -23,9 +24,16 @@ fn split_line(line: &str) -> Option<(&str, &str)> {
 }
 
 fn main() -> Result<()> {
+  let input = std::env::var("SCS_INPUT_DIR")
+    .map(PathBuf::from)
+    .unwrap_or_else(|_| PathBuf::from(CARGO_MANIFEST_DIR).join("logs"));
+  let mut output = std::env::var("SCS_MODEL_PATH")
+    .map(PathBuf::from)
+    .unwrap_or_else(|_| PathBuf::from(CARGO_MANIFEST_DIR).join("models").join("model.yaml"));
+
   println!("Training...");
   let mut chain = markov::Chain::<String>::of_order(2);
-  for entry in WalkDir::new(INPUT)
+  for entry in WalkDir::new(input)
     .into_iter()
     .filter_map(|e| e.ok())
     .filter(|entry| entry.path().extension().and_then(OsStr::to_str) == Some("log"))
@@ -35,8 +43,15 @@ fn main() -> Result<()> {
       chain.feed_str(message);
     }
   }
+
   println!("Saving model...");
-  chain.save(OUTPUT)?;
+
+  if output.is_dir() {
+    chain.save(&output.join(format!("model-{}.yaml", Utc::today().format("%F"))))?;
+    output = output.join("model.yaml");
+  }
+
+  chain.save(output)?;
   println!("Done");
 
   Ok(())

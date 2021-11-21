@@ -1,5 +1,0 @@
-{
-  "login": "your_channel_name",
-  "tokin": "your_twitch_oauth_token",
-  "channels": ["your_channel_name", "a_different_channel_name"]
-}

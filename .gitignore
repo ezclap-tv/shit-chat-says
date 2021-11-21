@@ -1,6 +1,6 @@
 /target
 
-data/**/*
+models/**/*
 /logs/
 collector.json
 chat.json

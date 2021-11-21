@@ -1,0 +1,9 @@
+{
+  "login": "your_channel_name",
+  "token": "your_twitch_oauth_token",
+  "channels": [
+    "your_channel_name",
+    "a_different_channel_name"
+  ],
+  "model_dir": "/path/to/model.yml"
+}

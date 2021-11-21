@@ -16,10 +16,7 @@
   }
 
   /** @returns {[string, string | null]} */
-  function splitOnce(
-    /** @type {string} */ string,
-    /** @type {string} */ needle
-  ) {
+  function splitOnce(/** @type {string} */ string, /** @type {string} */ needle) {
     let idx = string.indexOf(needle);
     if (idx === -1) {
       return [string, null];
@@ -33,7 +30,7 @@
   ) {
     return new Promise((resolve) => {
       let line = "";
-      stream.on("data", (chunk) => {
+      stream.on("models", (chunk) => {
         let lf = chunk.indexOf("\n");
         while (lf !== -1) {
           line += chunk.slice(0, chunk[lf - 1] === "\r" ? lf - 1 : lf);
@@ -57,13 +54,10 @@
 
   const re = /\[(\d+:\d+:\d+)\]  ([^\s]+): (.*)/;
 
-  for (const file of rwalkfs("./data")) {
+  for (const file of rwalkfs("./models")) {
     if (path.extname(file) !== ".log") continue;
     let tz = "UTC";
-    const [channel, date] = splitOnce(
-      path.basename(file, path.extname(file)),
-      "-"
-    );
+    const [channel, date] = splitOnce(path.basename(file, path.extname(file)), "-");
     const out = fs.createWriteStream(path.join("logs", path.basename(file)));
     await lines(fs.createReadStream(file), (line) => {
       if (line.startsWith("#")) {
