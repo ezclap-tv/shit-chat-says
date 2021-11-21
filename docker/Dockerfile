@@ -23,22 +23,21 @@ WORKDIR /home/rust/app
 # By default, build for the current cpu
 ENV RUSTFLAGS "-C target-cpu=native"
 RUN --mount=type=cache,target=/home/rust/.cargo/git \
-        --mount=type=cache,target=/home/rust/.cargo/registry \
-        --mount=type=cache,sharing=private,target=/home/rust/app/target \
-        RUSTFLAGS=$RUSTFLAGS cargo build --all --release && \
-        cp $HOME/app/target/release/gen       $HOME/binaries && \
-        cp $HOME/app/target/release/chat      $HOME/binaries && \
-        cp $HOME/app/target/release/train     $HOME/binaries && \
-        cp $HOME/app/target/release/collector $HOME/binaries
+    --mount=type=cache,target=/home/rust/.cargo/registry \
+    --mount=type=cache,sharing=private,target=/home/rust/app/target \
+    RUSTFLAGS=$RUSTFLAGS cargo build --all --release && \
+    cp $HOME/app/target/release/gen       $HOME/binaries && \
+    cp $HOME/app/target/release/chat      $HOME/binaries && \
+    cp $HOME/app/target/release/train     $HOME/binaries && \
+    cp $HOME/app/target/release/collector $HOME/binaries
 
 
 # Use a slim image for the final image
 FROM debian:buster-slim as runtime
 
 RUN apt update && \ 
-        apt install -y ca-certificates && \ 
-        update-ca-certificates  && \ 
-        rm -rf /var/lib/apt/lists/*
+    apt install -y ca-certificates && \ 
+    update-ca-certificates  && \ 
+    rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /home/rust/binaries /binaries
-COPY ./config /config

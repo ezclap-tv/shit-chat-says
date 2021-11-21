@@ -11,6 +11,7 @@ services:
     command: /config/collector.json
     volumes:
       - ../logs:/logs
+      - ../config:/config
 
   chat:
     restart: always
@@ -24,6 +25,7 @@ services:
       - SCS_MODEL_PATH=/models/model.yaml
     volumes:
       - ../models:/models
+      - ../config:/config
 
   train:
     profiles:
