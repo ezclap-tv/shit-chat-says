@@ -51,7 +51,10 @@ async fn run(config: Config) -> Result<()> {
           },
           _ => ()
         },
-        Err(err) => log::error!("{}", err)
+        Err(err) => {
+          log::error!("{err}");
+          break Ok(())
+        }
       }
     }
   }
