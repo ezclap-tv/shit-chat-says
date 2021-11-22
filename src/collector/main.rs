@@ -14,7 +14,7 @@ use twitch::Message;
 
 async fn run(config: Config) -> Result<()> {
   log::info!("Connecting to Twitch");
-  let mut conn = twitch::connect(twitch::Config::default()).await.unwrap();
+  let mut conn = twitch::connect(config.clone().into()).await.unwrap();
   // one sink per channel
   let mut sinks = HashMap::<String, sink::DailyLogSink>::with_capacity(config.channels.len());
   for channel in config.channels.into_iter() {

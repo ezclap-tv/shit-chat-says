@@ -6,5 +6,9 @@
       "buffer": 2048
     }
   ],
-  "output_directory": "logs"
+  "output_directory": "logs",
+  "credentials": {
+    "login": "<bot username>",
+    "token": "generate at https://twitchapps.com/tmi/"
+  }
 }

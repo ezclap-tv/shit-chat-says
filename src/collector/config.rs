@@ -28,9 +28,16 @@ struct TempConfig {
   channels: Vec<TempChannel>,
   #[serde(default = "default_output_directory")]
   output_directory: PathBuf,
+  credentials: Option<TwitchLogin>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, Deserialize)]
+pub struct TwitchLogin {
+  pub login: String,
+  pub token: String,
+}
+
+#[derive(Clone, Debug)]
 pub struct Channel {
   pub name: String,
   pub buffer: usize,
@@ -48,10 +55,11 @@ impl From<TempChannel> for Channel {
   }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Config {
   pub channels: Vec<Channel>,
   pub output_directory: PathBuf,
+  pub credentials: Option<TwitchLogin>,
 }
 
 impl From<TempConfig> for Config {
@@ -59,10 +67,12 @@ impl From<TempConfig> for Config {
     let TempConfig {
       channels,
       output_directory,
+      credentials,
     } = c;
     Self {
       channels: channels.into_iter().map(Channel::from).collect(),
       output_directory,
+      credentials,
     }
   }
 }
@@ -88,5 +98,20 @@ impl Config {
     }
 
     Ok(config)
+  }
+}
+
+impl From<Config> for twitch::conn::Config {
+  fn from(c: Config) -> Self {
+    twitch::conn::Config {
+      credentials: match c.credentials {
+        Some(info) => twitch::conn::Login::Regular {
+          login: info.login,
+          token: info.token,
+        },
+        None => twitch::conn::Login::Anonymous,
+      },
+      membership_data: false,
+    }
   }
 }
