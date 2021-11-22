@@ -4,4 +4,8 @@
 models/**/*
 /logs/
 collector.json
+collector.test.json
 chat.json
+chat.test.json
+train.json
+train.test.json

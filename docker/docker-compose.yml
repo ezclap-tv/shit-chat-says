@@ -6,6 +6,7 @@ services:
     build:
       context: ..
       dockerfile: ./docker/Dockerfile
+      target: runtime
     entrypoint:
       - /binaries/collector
     command: /config/collector.json
@@ -18,11 +19,10 @@ services:
     build:
       context: ..
       dockerfile: ./docker/Dockerfile
+      target: runtime
     entrypoint:
       - /binaries/chat
     command: /config/chat.json
-    environment:
-      - SCS_MODEL_PATH=/models/model.yaml
     volumes:
       - ../models:/models
       - ../config:/config
@@ -33,11 +33,10 @@ services:
     build:
       context: ..
       dockerfile: ./docker/Dockerfile
-    entrypoint:
-      - /binaries/train
+      target: trainer
     environment:
-      - SCS_INPUT_DIR=/logs
-      - SCS_MODEL_PATH=/models/model.yaml
+      - TRAIN_CONFIG=/config/train.json
     volumes:
       - ../logs:/logs
       - ../models:/models
+      - ../config:/config
