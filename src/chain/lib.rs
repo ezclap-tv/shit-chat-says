@@ -70,6 +70,13 @@ impl KeyMaker<(Token, Token, Token, Token)> for Token {
   }
 }
 
+#[macro_export]
+macro_rules! of_order {
+  ($order:tt) => {
+    $crate::Chain::<$order>::new()
+  };
+}
+
 #[derive(Debug, Clone)]
 pub struct Chain<const ORDER: usize> {
   dict: Dict,
@@ -104,7 +111,16 @@ where
   }
 }
 
-pub fn load_chain_of_any_supported_order<R: Read + Seek>(reader: &mut R) -> anyhow::Result<Box<dyn TextGenerator>> {
+pub fn load_chain_of_any_supported_order<P: AsRef<std::path::Path>>(path: P) -> anyhow::Result<Box<dyn TextGenerator>> {
+  let mut file = std::fs::File::open(path)?;
+  let mut buf = Vec::new();
+  file.read_to_end(&mut buf)?;
+  load_chain_of_any_supported_order_with_reader(&mut std::io::Cursor::new(&buf))
+}
+
+pub fn load_chain_of_any_supported_order_with_reader<R: Read + Seek>(
+  reader: &mut R,
+) -> anyhow::Result<Box<dyn TextGenerator>> {
   let order = ser::read_header(reader)?;
   reader.rewind()?;
 
