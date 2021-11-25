@@ -105,7 +105,7 @@ fn collect_logs(store: &mut LogStore, config: &TrainingConfig) {
   bar.finish_at_current_pos();
 }
 
-fn train<'a>(chain: &mut markov::Chain<String>, authored_mode: bool, logs: impl Iterator<Item = &'a str>) {
+fn train<'a>(chain: &mut chain::Chain<2>, authored_mode: bool, logs: impl Iterator<Item = &'a str>) {
   #[cfg(not(feature = "no-progress"))]
   let bar =
     ProgressBar::new(!0).with_style(indicatif::ProgressStyle::default_spinner().template("{spinner} {pos} (files)"));
@@ -126,16 +126,16 @@ fn train<'a>(chain: &mut markov::Chain<String>, authored_mode: bool, logs: impl 
   bar.finish_at_current_pos();
 }
 
-fn save_model(
-  chain: &markov::Chain<String>,
+fn save_model<const ORDER: usize>(
+  chain: &chain::Chain<ORDER>,
   name: &str,
   output_path: &std::path::Path,
   save_timestamped_checkpoint: bool,
 ) -> anyhow::Result<()> {
   if save_timestamped_checkpoint {
-    chain.save(&output_path.join(format!("{}-{}.yaml", name, Utc::today().format("%F"))))?;
+    chain.save(&output_path.join(format!("{}-{}.chain", name, Utc::today().format("%F"))))?;
   }
-  chain.save(&output_path.join(format!("{}.yaml", name)))?;
+  chain.save(&output_path.join(format!("{}.chain", name)))?;
   Ok(())
 }
 
@@ -159,9 +159,9 @@ fn main() -> Result<()> {
 
   let mut base_chain = if let Some(path) = &config.model_to_fine_tune {
     log::info!("Loading a previous model for fine-tuning...");
-    markov::Chain::load(path)?
+    chain::Chain::<2>::load(path)?
   } else {
-    markov::Chain::<String>::of_order(2)
+    chain::of_order!(2)
   };
 
   if config.channels.is_empty() {
@@ -183,9 +183,9 @@ fn main() -> Result<()> {
     log::info!("=> Training for {}", channel);
 
     // TODO: should probably fork and add a clone impl to the chain. Or write our own chain with an efficient data-oriented implementation.
-    let mut chain = serde_yaml::from_str(&serde_yaml::to_string(&base_chain).unwrap()).unwrap();
+    let mut chain = base_chain.clone();
     train(&mut chain, config.authored_mode, store.filter(channel, &config));
-    log::info!("=> Saving {}.yaml...", channel);
+    log::info!("=> Saving {}.chain...", channel);
     save_model(
       &chain,
       channel,
