@@ -15,10 +15,10 @@ fn main() -> Result<()> {
   while let Ok(line) = rl.readline(">> ") {
     let line = line.as_str().trim();
     let generated = if line.is_empty() {
-      chain.generate_text()
+      chain::sample(&chain, "", 16)
     } else {
       rl.add_history_entry(line);
-      chain.generate_text_from_token(line)
+      chain::sample(&chain, line, 16)
     };
     println!("{}", generated);
   }

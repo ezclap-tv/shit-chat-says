@@ -7,11 +7,12 @@ use config::Config;
 use std::{env, path::PathBuf};
 use twitch::Message;
 
-type Model = markov::Chain<String>;
+// Set to 0 to disable sampling.
+const MAX_SAMPLES: usize = 16;
 
 async fn run(config: Config) -> Result<()> {
   log::info!("Loading model");
-  let model = Model::load(config.model_path.clone())?;
+  let model = chain::load_chain_of_any_supported_order(&config.model_path)?;
 
   log::info!("Connecting to Twitch");
   let mut conn = twitch::connect(config.clone().into()).await.unwrap();
@@ -39,12 +40,11 @@ async fn run(config: Config) -> Result<()> {
             // `rest` is ignored
             if text.to_ascii_lowercase().starts_with(&prefix) {
               let response = if let Some(seed) = text.split_whitespace().nth(1) {
-                model.generate_from_token(seed.to_string())
+                chain::sample(&model, seed, MAX_SAMPLES)
               } else {
-                model.generate()
+                chain::sample(&model, "", MAX_SAMPLES)
               };
               if !response.is_empty() {
-                let response = response.join(" ");
                 conn.sender.privmsg(channel, &response).await?;
               }
             }
@@ -79,7 +79,7 @@ async fn main() -> Result<()> {
   if config.model_path.as_os_str().is_empty() {
     config.model_path = std::env::var("SCS_MODEL_PATH")
       .map(PathBuf::from)
-      .unwrap_or_else(|_| PathBuf::from(CARGO_MANIFEST_DIR).join("models").join("model.yaml"));
+      .unwrap_or_else(|_| PathBuf::from(CARGO_MANIFEST_DIR).join("models").join("model.chain"));
   }
 
   log::info!("{config:?}");
