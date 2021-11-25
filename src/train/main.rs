@@ -32,7 +32,7 @@ fn main() -> Result<()> {
     .unwrap_or_else(|_| PathBuf::from(CARGO_MANIFEST_DIR).join("models").join("model.yaml"));
 
   println!("Training...");
-  let mut chain = markov::Chain::<String>::of_order(2);
+  let mut chain = markov::Chain::of_order(2);
   for entry in WalkDir::new(input)
     .into_iter()
     .filter_map(|e| e.ok())

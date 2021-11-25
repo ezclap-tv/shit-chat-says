@@ -1309,6 +1309,7 @@ dependencies = [
  "rustyline",
  "serde",
  "serde_json",
+ "serde_yaml",
  "string-interner",
  "tokio",
  "twitch",

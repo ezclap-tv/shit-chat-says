@@ -25,27 +25,29 @@ fn get_logs() -> Vec<String> {
 fn chain_benchmarks(c: &mut Criterion) {
   let logs = get_logs();
 
-  //   let mut group = c.benchmark_group("chains: training");
-  //   group.bench_function("(own-chain): feed 9.2MB", |b| {
-  //     b.iter(|| {
-  //       let mut chain = chain::Chain::<2>::new();
-  //       for msg in &logs {
-  //         chain.feed_str(msg);
-  //       }
-  //       chain
-  //     })
-  //   });
-  //   group.bench_function("(markov-chain): feed 9.2MB", |b| {
-  //     b.iter(|| {
-  //       let mut chain = markov::Chain::of_order(2);
-  //       for msg in &logs {
-  //         chain.feed_str(msg);
-  //       }
-  //       chain
-  //     })
-  //   });
-  //   std::mem::drop(group);
+  // ==== Training ====
+  let mut group = c.benchmark_group("chains: training");
+  group.bench_function("(own-chain): feed 9.2MB", |b| {
+    b.iter(|| {
+      let mut chain = chain::Chain::<2>::new();
+      for msg in &logs {
+        chain.feed_str(msg);
+      }
+      chain
+    })
+  });
+  group.bench_function("(markov-chain): feed 9.2MB", |b| {
+    b.iter(|| {
+      let mut chain = markov::Chain::of_order(2);
+      for msg in &logs {
+        chain.feed_str(msg);
+      }
+      chain
+    })
+  });
+  std::mem::drop(group);
 
+  // ==== Inference ====
   let mut group = c.benchmark_group("chains: inference");
   let mut chain = chain::Chain::<2>::new();
   for msg in &logs {
@@ -68,6 +70,43 @@ fn chain_benchmarks(c: &mut Criterion) {
       for _ in 0..1000 {
         black_box(chain.generate_str());
       }
+    });
+  });
+  std::mem::drop(group);
+
+  // ==== Serialization ====
+  let mut chain = chain::Chain::<2>::new();
+  for msg in &logs {
+    chain.feed_str(msg);
+  }
+
+  let mut group = c.benchmark_group("chains: serialization");
+  group.bench_function("(own-chain): serialize once", |b| {
+    b.iter(|| {
+      black_box(chain.save_to_bytes().unwrap());
+    });
+  });
+  let bytes = chain.save_to_bytes().unwrap();
+  group.bench_function("(own-chain): deserialize once", |b| {
+    b.iter(|| {
+      black_box(chain::Chain::<2>::load_from_bytes(&bytes).unwrap());
+    });
+  });
+
+  let mut chain = markov::Chain::of_order(2);
+  for msg in &logs {
+    chain.feed_str(msg);
+  }
+  group.bench_function("(markov-chain): serialize once", |b| {
+    b.iter(|| {
+      black_box(serde_yaml::to_string(&chain).unwrap());
+    });
+  });
+
+  let yaml = serde_yaml::to_string(&chain).unwrap();
+  group.bench_function("(markov-chain): deserialize once", |b| {
+    b.iter(|| {
+      black_box(serde_yaml::from_str::<markov::Chain<String>>(&yaml).unwrap());
     });
   });
 }
