@@ -8,7 +8,7 @@ use std::{env, path::PathBuf};
 use twitch::Message;
 
 // Set to 0 to disable sampling.
-const MAX_SAMPLES: usize = 16;
+const MAX_SAMPLES: usize = 4;
 
 async fn run(config: Config) -> Result<()> {
   log::info!("Loading model");
