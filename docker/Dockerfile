@@ -14,6 +14,7 @@ RUN chown rust:rust -R $HOME
 
 # Copy the code and Cargo metamodels files into the image
 COPY ./src        $HOME/app/src
+COPY ./benches    $HOME/app/benches
 COPY ./Cargo.lock $HOME/app/Cargo.lock
 COPY ./Cargo.toml $HOME/app/Cargo.toml
 
@@ -35,9 +36,9 @@ RUN --mount=type=cache,target=/home/rust/.cargo/git \
 # Use a slim image for the runtime image
 FROM debian:buster-slim as runtime
 
-RUN apt update && \ 
-    apt install -y ca-certificates && \ 
-    update-ca-certificates  && \ 
+RUN apt update && \
+    apt install -y ca-certificates && \
+    update-ca-certificates  && \
     rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /home/rust/binaries /binaries

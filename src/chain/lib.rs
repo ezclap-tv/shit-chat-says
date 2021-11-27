@@ -98,6 +98,15 @@ pub trait TextGenerator {
   fn generate_text_from_token(&self, word: &str) -> String;
 }
 
+impl TextGenerator for Box<dyn TextGenerator> {
+  fn generate_text(&self) -> String {
+    (**self).generate_text()
+  }
+  fn generate_text_from_token(&self, word: &str) -> String {
+    (**self).generate_text_from_token(word)
+  }
+}
+
 impl<const ORDER: usize> TextGenerator for Chain<ORDER>
 where
   Token: OrderOf<{ ORDER + 1 }>,
@@ -130,6 +139,25 @@ pub fn load_chain_of_any_supported_order_with_reader<R: Read + Seek>(
     3 => Ok(Box::new(self::ser::ChainDeserializer::<3>::new().deserialize(reader)?)),
     _ => anyhow::bail!(format!("Unsupported chain order: {}", order)),
   }
+}
+
+pub fn sample(generator: &dyn TextGenerator, token: impl AsRef<str>, max_samples: usize) -> String {
+  let mut count = 0;
+  let token = token.as_ref().trim();
+  let mut output = if token.is_empty() {
+    generator.generate_text()
+  } else {
+    generator.generate_text_from_token(token)
+  };
+  while output.trim() == token && count < max_samples {
+    output = if token.is_empty() {
+      generator.generate_text()
+    } else {
+      generator.generate_text_from_token(token)
+    };
+    count += 1;
+  }
+  output
 }
 
 impl<const ORDER: usize> Chain<ORDER> {
