@@ -32,7 +32,8 @@ fn main() -> Result<()> {
     .unwrap_or_else(|_| PathBuf::from(CARGO_MANIFEST_DIR).join("models").join("model.yaml"));
 
   println!("Training...");
-  let mut chain = markov::Chain::<String>::of_order(2);
+  // let mut chain = markov::Chain::of_order(2);
+  let mut chain = chain::of_order!(2);
   for entry in WalkDir::new(input)
     .into_iter()
     .filter_map(|e| e.ok())
@@ -47,8 +48,8 @@ fn main() -> Result<()> {
   println!("Saving model...");
 
   if output.is_dir() {
-    chain.save(&output.join(format!("model-{}.yaml", Utc::today().format("%F"))))?;
-    output = output.join("model.yaml");
+    chain.save(&output.join(format!("model-{}.chain", Utc::today().format("%F"))))?;
+    output = output.join("model.chain");
   }
 
   chain.save(output)?;

@@ -10,15 +10,15 @@ fn main() -> Result<()> {
     .unwrap_or_else(|_| PathBuf::from(CARGO_MANIFEST_DIR).join("models").join("model.yaml"));
 
   println!("Loading model from {}...", model_dir.display());
-  let chain = markov::Chain::<String>::load(model_dir)?;
+  let chain = chain::load_chain_of_any_supported_order(model_dir)?;
   let mut rl = rustyline::Editor::<()>::new();
   while let Ok(line) = rl.readline(">> ") {
     let line = line.as_str().trim();
     let generated = if line.is_empty() {
-      chain.generate_str()
+      chain::sample(&chain, "", 16)
     } else {
       rl.add_history_entry(line);
-      chain.generate_str_from_token(line)
+      chain::sample(&chain, line, 16)
     };
     println!("{}", generated);
   }
