@@ -28,8 +28,8 @@ services:
       - ../config:/config
 
   train:
-    profiles:
-      - training
+    # profiles:
+    #  - training
     build:
       context: ..
       dockerfile: ./docker/Dockerfile
