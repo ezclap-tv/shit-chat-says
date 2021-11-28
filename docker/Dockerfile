@@ -58,10 +58,15 @@ COPY ./docker/train.sh  /binaries/train.sh
 RUN chmod +x            /binaries/train.sh
 
 COPY ./docker/train.cron /etc/cron.d/train
-RUN chmod +x            /etc/cron.d/train
+RUN chmod +x             /etc/cron.d/train
+
+COPY ./docker/train-entrypoint.sh /train-entrypoint.sh
+RUN chmod +x                      /train-entrypoint.sh
 
 RUN crontab /etc/cron.d/train
 RUN touch /var/log/cron.log
 
 # Run cron on container startup
-CMD [ "cron", "-f", "-d", "8" ]
+
+# The lines below display the cron output in docker logs. Code taken from https://stackoverflow.com/a/54250753.
+ENTRYPOINT [ "/train-entrypoint.sh" ]
