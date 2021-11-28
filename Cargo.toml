@@ -25,6 +25,9 @@ path = "src/collector/main.rs"
 name = "chat"
 path = "src/chat/main.rs"
 
+[features]
+"no-progress" = []
+
 [[bench]]
 name = "chains"
 harness = false
@@ -42,6 +45,9 @@ serde_json = "1.0.71"
 chrono = "0.4.19"
 crossbeam-channel = "0.5.1"
 walkdir = "2.3.2"
+regex = "1.5.4"
+lazy_static = "1.4.0"
+indicatif = "0.16.2"
 ahash = "0.7.6"
 rand = "0.8.4"
 string-interner = "0.14.0"

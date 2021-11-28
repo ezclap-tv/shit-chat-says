@@ -1,0 +1,5 @@
+# Run the binary at midnight UTC
+0 0 * * * /binaries/train.sh > /tmp/stdout 2> /tmp/stderr
+
+# The line below runs the script every minute -- uncomment for debugging
+# * * * * * /binaries/train.sh > /tmp/stdout 2> /tmp/stderr
