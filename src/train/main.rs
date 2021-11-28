@@ -64,6 +64,9 @@ impl LogStore {
   }
 }
 
+// NOTE: this uses too much RAM when the input is large (for obvious reasons);
+//       should probably rewrite this to collect only the filenames, and then make
+//       the log store use some kind of filesize-based cache.
 fn collect_logs(store: &mut LogStore, config: &TrainingConfig) {
   #[cfg(not(feature = "no-progress"))]
   let bar =
