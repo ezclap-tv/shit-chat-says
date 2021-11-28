@@ -96,6 +96,9 @@ struct EdgeMap {
 pub trait TextGenerator {
   fn generate_text(&self) -> String;
   fn generate_text_from_token(&self, word: &str) -> String;
+  fn meta_data(&self, _word: &str) -> String {
+    String::new()
+  }
 }
 
 impl TextGenerator for Box<dyn TextGenerator> {
@@ -104,6 +107,9 @@ impl TextGenerator for Box<dyn TextGenerator> {
   }
   fn generate_text_from_token(&self, word: &str) -> String {
     (**self).generate_text_from_token(word)
+  }
+  fn meta_data(&self, word: &str) -> String {
+    (**self).meta_data(word)
   }
 }
 
@@ -117,6 +123,10 @@ where
 
   fn generate_text_from_token(&self, word: &str) -> String {
     self.generate_from_token(word)
+  }
+
+  fn meta_data(&self, word: &str) -> String {
+    self.stats_for(word)
   }
 }
 
@@ -201,6 +211,66 @@ impl<const ORDER: usize> Chain<ORDER> {
 
   pub fn load_from_bytes(bytes: &[u8]) -> anyhow::Result<Self> {
     self::ser::ChainDeserializer::new().deserialize(&mut std::io::Cursor::new(&bytes))
+  }
+
+  pub fn stats_for(&self, token: &str) -> String {
+    use std::fmt::Write;
+
+    let mut output = String::new();
+
+    writeln!(output, "==== Word Metadata ====").unwrap();
+    writeln!(output, "-> Word: `{}`", token).unwrap();
+
+    if let Some(word_id) = self.dict.get(token) {
+      writeln!(output, "-> word_id: {:?}", word_id).unwrap();
+      writeln!(output, "-> keys:").unwrap();
+      for placement in [true, false] {
+        let stats = self.find_edge_stats(word_id, 5, placement);
+        if let Some(stats) = stats {
+          writeln!(output, "  -> key: {:?}", stats.key(self)).unwrap();
+          writeln!(output, "  -> edge_count: {:?}", stats.edge_count).unwrap();
+          writeln!(
+            output,
+            "  -> top(5) edges:\n{}",
+            stats
+              .top_edges(self)
+              .into_iter()
+              .map(|(key, n)| format!("    -> {}: {}", key.unwrap_or("<None>"), n))
+              .collect::<Vec<_>>()
+              .join("\n")
+          )
+          .unwrap()
+        }
+      }
+    } else {
+      writeln!(output, "-> word_id: not found").unwrap();
+    }
+
+    write!(output, "=======================").unwrap();
+
+    output
+  }
+
+  fn find_edge_stats(&self, word_id: WordId, top_n: usize, key_placement_end: bool) -> Option<WordStats<ORDER>> {
+    let mut key = [Token::None; ORDER];
+    key[if key_placement_end { ORDER - 1 } else { 0 }] = Token::Some(word_id);
+
+    if let Some(edge_id) = self.nodes.get(&key) {
+      let edge_map = &self.edges[edge_id.0];
+      Some(WordStats {
+        key,
+        edge_count: edge_map.edges.len(),
+        top_edges: edge_map
+          .edges
+          .iter()
+          .sorted_by_key(|e| std::cmp::Reverse(*e.1))
+          .take(top_n)
+          .map(|c| (*c.0, *c.1))
+          .collect::<Vec<_>>(),
+      })
+    } else {
+      None
+    }
   }
 
   #[inline]
@@ -358,6 +428,30 @@ macro_rules! chain_of_order {
       }
     }
   };
+}
+
+struct WordStats<const ORDER: usize> {
+  key: [Token; ORDER],
+  edge_count: usize,
+  top_edges: Vec<(Token, u64)>,
+}
+
+impl<const ORDER: usize> WordStats<ORDER> {
+  pub fn key<'c>(&self, chain: &'c Chain<ORDER>) -> [Option<&'c str>; ORDER] {
+    let mut key = [None; ORDER];
+    for (i, token) in self.key.iter().enumerate() {
+      key[i] = token.and_then(|word_id| chain.dict.resolve(word_id));
+    }
+    key
+  }
+
+  pub fn top_edges<'c>(&self, chain: &'c Chain<ORDER>) -> Vec<(Option<&'c str>, u64)> {
+    self
+      .top_edges
+      .iter()
+      .map(|(token, count)| (token.map(|word_id| chain.dict.resolve(word_id).unwrap()), *count))
+      .collect()
+  }
 }
 
 chain_of_order!(1);

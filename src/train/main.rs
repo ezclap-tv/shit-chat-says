@@ -115,9 +115,9 @@ fn train<'a>(chain: &mut chain::Chain<2>, authored_mode: bool, logs: impl Iterat
     bar.inc(1);
     for (user, message) in log.split('\n').filter_map(split_line) {
       if authored_mode {
-        chain.feed_str(&format!("{}: {}", user, message));
+        chain.feed_str(&format!("{}: {}", user, message.trim()));
       } else {
-        chain.feed_str(message);
+        chain.feed_str(message.trim());
       }
     }
   }
