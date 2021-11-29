@@ -22,6 +22,7 @@ async fn run(config: Config) -> Result<()> {
     conn.sender.join(channel).await?;
   }
   let prefix = format!("@{}", config.login.to_ascii_lowercase());
+  let command_prefix = format!("${}", config.login.to_ascii_lowercase());
   log::info!("Chat bot is ready");
 
   loop {
@@ -47,7 +48,20 @@ async fn run(config: Config) -> Result<()> {
               if !response.is_empty() {
                 conn.sender.privmsg(channel, &response).await?;
               }
+            } else if text.to_ascii_lowercase().starts_with(&command_prefix) {
+              match text.split_whitespace().nth(1) {
+                Some("model") => {
+                  // Save to unwrap the filename here since the model has been successfully loaded.
+                  let model_name = config.model_path.file_name().unwrap();
+                  let model_snapshot = config.model_path.metadata().and_then(|m| m.modified()).map(|time| {
+                    chrono::DateTime::<chrono::Local>::from(time).with_timezone(&chrono::Utc).format("%F").to_string()
+                  }).unwrap_or_else(|_| String::from("unknown"));
+                  conn.sender.privmsg(channel, &format!("{} (version: {})",model_name.to_string_lossy(), model_snapshot)).await?;
+                },
+                Some(_) | None => ()
+              }
             }
+
           },
           _ => ()
         },
