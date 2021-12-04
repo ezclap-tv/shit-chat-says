@@ -187,7 +187,7 @@ fn main() -> Result<()> {
     log::info!("=> Training for {}", channel);
 
     let mut chain = base_chain.clone().with_metadata(format!(
-      "{{ channels: {}, order: {} }}",
+      "{{ channels: {}; order: {} }}",
       std::iter::once(channel)
         .chain(config.channels[channel].iter())
         .map(|s| s.as_ref())
