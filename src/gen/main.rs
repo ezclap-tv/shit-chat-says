@@ -18,8 +18,13 @@ fn main() -> Result<()> {
       chain::sample(&chain, "", 16)
     } else {
       rl.add_history_entry(line);
-      println!("{}", chain.word_meta_data(line));
-      chain::sample(&chain, line, 16)
+      let words = line.split_whitespace().collect::<Vec<_>>();
+      if words.len() == 1 {
+        println!("{}", chain.word_meta_data(line));
+        chain::sample(&chain, words[0], 16)
+      } else {
+        chain::sample_seq(&chain, &words, 16)
+      }
     };
     println!("{}", generated);
   }

@@ -136,7 +136,9 @@ where
   }
 
   fn try_generate_text_from_token_sequence(&self, words: &[&str]) -> anyhow::Result<String> {
-    let seq = &words[..ORDER];
+    let seq = words
+      .get(..ORDER)
+      .ok_or_else(|| anyhow::anyhow!(format!("Expected {} words, got {}", ORDER, words.len())))?;
     let seq: [&str; ORDER] = seq.try_into()?;
     Ok(self.generate_from_token_seq(seq))
   }
@@ -185,6 +187,22 @@ pub fn sample(generator: &dyn TextGenerator, token: impl AsRef<str>, max_samples
     } else {
       generator.generate_text_from_token(token)
     };
+    count += 1;
+  }
+  output
+}
+
+pub fn sample_seq(generator: &dyn TextGenerator, words: &[&str], max_samples: usize) -> String {
+  let mut count = 0;
+  let mut output = generator
+    .try_generate_text_from_token_sequence(words)
+    .ok()
+    .unwrap_or_else(String::new);
+  while output.trim().split_whitespace().count() <= 1 && count < max_samples {
+    output = generator
+      .try_generate_text_from_token_sequence(words)
+      .ok()
+      .unwrap_or_else(String::new);
     count += 1;
   }
   output
@@ -405,18 +423,19 @@ impl<const ORDER: usize> Chain<ORDER> {
   }
 
   fn generate_from_seq(&self, rng: &mut StdRng, seq: [&str; ORDER]) -> Vec<WordId> {
-    'outer: for seq_end in 0..ORDER {
+    'outer: for seq_start in 0..ORDER - 1 {
       let mut curs = [Token::None; ORDER];
 
-      for i in 0..seq_end {
+      for i in seq_start..ORDER {
         curs[i] = match self.dict.get(seq[i]) {
           Some(word_id) => Token::Some(word_id),
           None => continue 'outer,
         };
       }
 
-      let mut output = Vec::new();
+      let mut output = curs.iter().copied().flatten().collect::<Vec<_>>();
       self.traverse_word_graph(rng, &mut output, curs);
+
       if !output.is_empty() {
         return output;
       }

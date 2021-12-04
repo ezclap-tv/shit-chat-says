@@ -9,6 +9,7 @@ use twitch::Message;
 
 // Set to 0 to disable sampling.
 const MAX_SAMPLES: usize = 4;
+const MAX_SAMPLES_FOR_SEQ_INPUT: usize = 16;
 
 async fn run(config: Config) -> Result<()> {
   log::info!("Loading model");
@@ -40,10 +41,11 @@ async fn run(config: Config) -> Result<()> {
             // format: `@LOGIN <seed> <...rest>`
             // `rest` is ignored
             if text.to_ascii_lowercase().starts_with(&prefix) {
-              let response = if let Some(seed) = text.split_whitespace().nth(1) {
-                chain::sample(&model, seed, MAX_SAMPLES)
-              } else {
-                chain::sample(&model, "", MAX_SAMPLES)
+              let words = text.split_whitespace().skip(1).collect::<Vec<_>>();
+              let response = match words.len() {
+                0 => chain::sample(&model, "", MAX_SAMPLES),
+                1 => chain::sample(&model, words[1], MAX_SAMPLES),
+                _ => chain::sample_seq(&model, &words, MAX_SAMPLES_FOR_SEQ_INPUT),
               };
               if !response.is_empty() {
                 conn.sender.privmsg(channel, &response).await?;
@@ -60,7 +62,7 @@ async fn run(config: Config) -> Result<()> {
                   conn.sender.privmsg(
                     channel,
                     &format!(
-                      "{} (version: {}, metadata: {})",
+                      "{} (version: {}; metadata: {})",
                       model_name.to_string_lossy(),
                       model_snapshot,
                       if model_metadata.is_empty() { "none" } else { model_metadata }
