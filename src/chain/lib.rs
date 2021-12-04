@@ -103,7 +103,7 @@ pub trait TextGenerator {
   fn model_meta_data(&self) -> &str {
     ""
   }
-  fn word_meta_data(&self, _word: &str) -> String {
+  fn phrase_meta_data(&self, _words: &[&str]) -> String {
     String::new()
   }
 }
@@ -118,8 +118,8 @@ impl TextGenerator for Box<dyn TextGenerator> {
   fn try_generate_text_from_token_sequence(&self, words: &[&str]) -> anyhow::Result<String> {
     (**self).try_generate_text_from_token_sequence(words)
   }
-  fn word_meta_data(&self, word: &str) -> String {
-    (**self).word_meta_data(word)
+  fn phrase_meta_data(&self, words: &[&str]) -> String {
+    (**self).phrase_meta_data(words)
   }
 }
 
@@ -147,8 +147,8 @@ where
     &self.metadata
   }
 
-  fn word_meta_data(&self, word: &str) -> String {
-    self.stats_for(word)
+  fn phrase_meta_data(&self, words: &[&str]) -> String {
+    self.stats_for_phrase(words)
   }
 }
 
@@ -198,7 +198,7 @@ pub fn sample_seq(generator: &dyn TextGenerator, words: &[&str], max_samples: us
     .try_generate_text_from_token_sequence(words)
     .ok()
     .unwrap_or_else(String::new);
-  while output.trim().split_whitespace().count() <= 1 && count < max_samples {
+  while (output.trim().split_whitespace().count() <= 1 || output.trim() == words.join(",")) && count < max_samples {
     output = generator
       .try_generate_text_from_token_sequence(words)
       .ok()
@@ -262,19 +262,40 @@ impl<const ORDER: usize> Chain<ORDER> {
     self::ser::ChainDeserializer::new().deserialize(&mut std::io::Cursor::new(&bytes))
   }
 
-  pub fn stats_for(&self, token: &str) -> String {
+  pub fn stats_for_phrase(&self, words: &[&str]) -> String {
     use std::fmt::Write;
 
     let mut output = String::new();
 
     writeln!(output, "==== Word Metadata ====").unwrap();
-    writeln!(output, "-> Word: `{}`", token).unwrap();
+    writeln!(output, "-> Word: `{}`", words.join(" ")).unwrap();
 
-    if let Some(word_id) = self.dict.get(token) {
-      writeln!(output, "-> word_id: {:?}", word_id).unwrap();
+    let mut keys = vec![];
+    if words.len() == 1 {
+      if let Some(word_id) = self.dict.get(words[0]) {
+        writeln!(output, "-> word_id: {:?}", word_id).unwrap();
+        for placement in [true, false] {
+          let mut key = [Token::None; ORDER];
+          key[if placement { ORDER - 1 } else { 0 }] = Token::Some(word_id);
+          keys.push(key);
+        }
+      }
+    } else if words.len() == ORDER {
+      let maybe_key = words.iter().flat_map(|w| self.dict.get(w)).collect::<Vec<_>>();
+      if maybe_key.len() == ORDER {
+        writeln!(output, "-> word_id: {:?}", maybe_key).unwrap();
+        let mut key = [Token::None; ORDER];
+        for i in 0..ORDER {
+          key[i] = Token::Some(maybe_key[i]);
+        }
+        keys.push(key);
+      }
+    }
+
+    if !keys.is_empty() {
       writeln!(output, "-> keys:").unwrap();
-      for placement in [true, false] {
-        let stats = self.find_edge_stats(word_id, 5, placement);
+      for key in keys {
+        let stats = self.find_edge_stats(key, 5);
         if let Some(stats) = stats {
           writeln!(output, "  -> key: {:?}", stats.key(self)).unwrap();
           writeln!(output, "  -> edge_count: {:?}", stats.edge_count).unwrap();
@@ -300,10 +321,7 @@ impl<const ORDER: usize> Chain<ORDER> {
     output
   }
 
-  fn find_edge_stats(&self, word_id: WordId, top_n: usize, key_placement_end: bool) -> Option<WordStats<ORDER>> {
-    let mut key = [Token::None; ORDER];
-    key[if key_placement_end { ORDER - 1 } else { 0 }] = Token::Some(word_id);
-
+  fn find_edge_stats(&self, key: [Token; ORDER], top_n: usize) -> Option<WordStats<ORDER>> {
     if let Some(edge_id) = self.nodes.get(&key) {
       let edge_map = &self.edges[edge_id.0];
       Some(WordStats {
