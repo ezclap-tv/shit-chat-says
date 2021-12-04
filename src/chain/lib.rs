@@ -1,6 +1,7 @@
 #![feature(generic_const_exprs)]
 #![allow(incomplete_features)]
 
+use std::convert::TryInto;
 use std::io::Read;
 use std::io::Seek;
 use std::io::Write;
@@ -79,6 +80,8 @@ macro_rules! of_order {
 
 #[derive(Debug, Clone)]
 pub struct Chain<const ORDER: usize> {
+  // An optional metadata string to be stored in the chain file.
+  metadata: String,
   dict: Dict,
   // TODO: arena allocate the hashmaps for extra perf?
   nodes: AHashMap<[Token; ORDER], EdgeId>,
@@ -96,7 +99,11 @@ struct EdgeMap {
 pub trait TextGenerator {
   fn generate_text(&self) -> String;
   fn generate_text_from_token(&self, word: &str) -> String;
-  fn meta_data(&self, _word: &str) -> String {
+  fn try_generate_text_from_token_sequence(&self, words: &[&str]) -> anyhow::Result<String>;
+  fn model_meta_data(&self) -> &str {
+    ""
+  }
+  fn word_meta_data(&self, _word: &str) -> String {
     String::new()
   }
 }
@@ -108,8 +115,11 @@ impl TextGenerator for Box<dyn TextGenerator> {
   fn generate_text_from_token(&self, word: &str) -> String {
     (**self).generate_text_from_token(word)
   }
-  fn meta_data(&self, word: &str) -> String {
-    (**self).meta_data(word)
+  fn try_generate_text_from_token_sequence(&self, words: &[&str]) -> anyhow::Result<String> {
+    (**self).try_generate_text_from_token_sequence(words)
+  }
+  fn word_meta_data(&self, word: &str) -> String {
+    (**self).word_meta_data(word)
   }
 }
 
@@ -125,7 +135,17 @@ where
     self.generate_from_token(word)
   }
 
-  fn meta_data(&self, word: &str) -> String {
+  fn try_generate_text_from_token_sequence(&self, words: &[&str]) -> anyhow::Result<String> {
+    let seq = &words[..ORDER];
+    let seq: [&str; ORDER] = seq.try_into()?;
+    Ok(self.generate_from_token_seq(seq))
+  }
+
+  fn model_meta_data(&self) -> &str {
+    &self.metadata
+  }
+
+  fn word_meta_data(&self, word: &str) -> String {
     self.stats_for(word)
   }
 }
@@ -140,7 +160,7 @@ pub fn load_chain_of_any_supported_order<P: AsRef<std::path::Path>>(path: P) -> 
 pub fn load_chain_of_any_supported_order_with_reader<R: Read + Seek>(
   reader: &mut R,
 ) -> anyhow::Result<Box<dyn TextGenerator>> {
-  let order = ser::read_header(reader)?;
+  let (order, _) = ser::read_header(reader)?;
   reader.rewind()?;
 
   match order {
@@ -173,6 +193,7 @@ pub fn sample(generator: &dyn TextGenerator, token: impl AsRef<str>, max_samples
 impl<const ORDER: usize> Chain<ORDER> {
   pub fn new() -> Self {
     Self {
+      metadata: String::new(),
       dict: StringInterner::new(),
       nodes: AHashMap::new(),
       edges: Vec::with_capacity(3),
@@ -181,11 +202,21 @@ impl<const ORDER: usize> Chain<ORDER> {
 
   pub fn with_approximate_dict_size(size: usize) -> Self {
     Self {
+      metadata: String::new(),
       dict: StringInterner::with_capacity(size),
       // words don't pair combinatorially, so we use size * 1.2 as a heuristic (absolutely ungrounded)
       nodes: AHashMap::with_capacity((size as f64 * 1.2) as usize),
       edges: Vec::with_capacity((size as f64 * 1.2) as usize),
     }
+  }
+
+  pub fn with_metadata(mut self, metadata: impl Into<String>) -> Self {
+    self.metadata = metadata.into();
+    self
+  }
+
+  pub const fn order(&self) -> usize {
+    ORDER
   }
 
   pub fn save<P: AsRef<std::path::Path>>(&self, path: P) -> anyhow::Result<()> {
@@ -205,7 +236,7 @@ impl<const ORDER: usize> Chain<ORDER> {
   pub fn save_to_bytes(&self) -> std::io::Result<Vec<u8>> {
     let ser = self::ser::ChainSerializer::new(self);
     let mut buf = Vec::with_capacity(ser.capacity_estimate());
-    ser.serialize(&mut buf)?;
+    ser.serialize(&mut buf, Some(&self.metadata))?;
     Ok(buf)
   }
 
@@ -333,6 +364,11 @@ impl<const ORDER: usize> Chain<ORDER> {
     self.generate_from_token_with_rng(&mut StdRng::from_entropy(), word)
   }
 
+  #[inline]
+  pub fn generate_from_token_seq<S: AsRef<str>>(&self, seq: [S; ORDER]) -> String {
+    self.generate_from_token_seq_with_rng(&mut StdRng::from_entropy(), seq)
+  }
+
   pub fn generate_with_rng(&self, rng: &mut StdRng) -> String {
     let output = self.raw_generate(rng);
     self.translate(output)
@@ -348,6 +384,16 @@ impl<const ORDER: usize> Chain<ORDER> {
     self.translate(output)
   }
 
+  pub fn generate_from_token_seq_with_rng<S: AsRef<str>>(&self, rng: &mut StdRng, seq: [S; ORDER]) -> String {
+    let mut word_seq = [""; ORDER];
+
+    for i in 0..ORDER {
+      word_seq[i] = seq[i].as_ref();
+    }
+
+    self.translate(self.generate_from_seq(rng, word_seq))
+  }
+
   fn translate(&self, words: Vec<WordId>) -> String {
     words.into_iter().map(|word| self.dict.resolve(word).unwrap()).join(" ")
   }
@@ -356,6 +402,27 @@ impl<const ORDER: usize> Chain<ORDER> {
     let mut output = Vec::new();
     self.traverse_word_graph(rng, &mut output, [Token::None; ORDER]);
     output
+  }
+
+  fn generate_from_seq(&self, rng: &mut StdRng, seq: [&str; ORDER]) -> Vec<WordId> {
+    'outer: for seq_end in 0..ORDER {
+      let mut curs = [Token::None; ORDER];
+
+      for i in 0..seq_end {
+        curs[i] = match self.dict.get(seq[i]) {
+          Some(word_id) => Token::Some(word_id),
+          None => continue 'outer,
+        };
+      }
+
+      let mut output = Vec::new();
+      self.traverse_word_graph(rng, &mut output, curs);
+      if !output.is_empty() {
+        return output;
+      }
+    }
+
+    Vec::new()
   }
 
   fn raw_generate_from_token(&self, rng: &mut StdRng, word: WordId) -> Vec<WordId> {

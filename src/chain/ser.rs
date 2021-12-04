@@ -59,16 +59,20 @@ impl<'a, const ORDER: usize> ChainSerializer<'a, ORDER> {
     string_lengths + string_content + key_tokens + edge_sums + edge_keys + edge_values
   }
 
-  pub fn serialize<W: Write>(mut self, buf: &mut W) -> std::io::Result<()> {
-    self.write_header(buf)?;
+  pub fn serialize<W: Write, S: AsRef<str>>(mut self, buf: &mut W, metadata: Option<S>) -> std::io::Result<()> {
+    self.write_header(buf, metadata.as_ref().map(|s| s.as_ref()).unwrap_or(""))?;
     self.write_dict(buf)?;
     self.write_nodes(buf)?;
     Ok(())
   }
 
-  fn write_header<W: Write>(&self, buf: &mut W) -> std::io::Result<()> {
+  fn write_header<W: Write>(&mut self, buf: &mut W, metadata: &str) -> std::io::Result<()> {
     buf.write_all(b"chain:")?;
     buf.write_all(&(ORDER as u8).to_le_bytes())?;
+    if !metadata.is_empty() {
+      buf.write_all(b":")?;
+      self.write_string(buf, metadata)?;
+    }
     buf.write_all(b";")
   }
 
@@ -167,11 +171,12 @@ impl<const ORDER: usize> ChainDeserializer<ORDER> {
   }
 
   pub fn deserialize<R: Read>(mut self, reader: &mut R) -> anyhow::Result<Chain<ORDER>> {
-    Self::read_header(reader)?;
+    let metadata = Self::read_header(reader)?;
     self.read_dict(reader)?;
     self.read_nodes(reader)?;
 
     Ok(Chain {
+      metadata,
       dict: self.dict,
       nodes: self.nodes,
       edges: self.edges,
@@ -254,15 +259,15 @@ impl<const ORDER: usize> ChainDeserializer<ORDER> {
     Ok(String::from_utf8(self.buf.clone())?)
   }
 
-  fn read_header<R: Read>(reader: &mut R) -> anyhow::Result<()> {
-    let order = read_header(reader)?;
+  fn read_header<R: Read>(reader: &mut R) -> anyhow::Result<String> {
+    let (order, metadata) = read_header(reader)?;
     if order as usize != ORDER {
       anyhow::bail!(format!(
         "Invalid chain order, deserializer expected {} but found {}",
         ORDER, order
       ));
     }
-    Ok(())
+    Ok(metadata)
   }
 
   fn read_byte<R: Read>(reader: &mut R) -> std::io::Result<u8> {
@@ -288,7 +293,7 @@ impl<const ORDER: usize> ChainDeserializer<ORDER> {
   }
 }
 
-pub(crate) fn read_header<R: Read>(reader: &mut R) -> anyhow::Result<u8> {
+pub(crate) fn read_header<R: Read>(reader: &mut R) -> anyhow::Result<(u8, String)> {
   let mut buf = [0u8; 6];
   reader.read_exact(&mut buf)?;
 
@@ -298,9 +303,18 @@ pub(crate) fn read_header<R: Read>(reader: &mut R) -> anyhow::Result<u8> {
 
   let order = ChainDeserializer::<0>::read_byte(reader)?;
 
-  if ChainDeserializer::<0>::read_byte(reader)? != b';' {
+  let mut next_byte = ChainDeserializer::<0>::read_byte(reader)?;
+  let metadata = if next_byte == b':' {
+    let metadata = ChainDeserializer::<0>::new().read_string(reader)?;
+    next_byte = ChainDeserializer::<0>::read_byte(reader)?;
+    metadata
+  } else {
+    String::new()
+  };
+
+  if next_byte != b';' {
     anyhow::bail!("Invalid chain file: malformed header");
   }
 
-  Ok(order)
+  Ok((order, metadata))
 }

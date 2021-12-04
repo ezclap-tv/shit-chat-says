@@ -1,3 +1,4 @@
+#![feature(iter_intersperse)]
 use std::collections::HashMap;
 use std::env;
 use std::fs;
@@ -185,8 +186,15 @@ fn main() -> Result<()> {
   for channel in config.channels.keys() {
     log::info!("=> Training for {}", channel);
 
-    // TODO: should probably fork and add a clone impl to the chain. Or write our own chain with an efficient data-oriented implementation.
-    let mut chain = base_chain.clone();
+    let mut chain = base_chain.clone().with_metadata(format!(
+      "{{ channels: {}, order: {} }}",
+      std::iter::once(channel)
+        .chain(config.channels[channel].iter())
+        .map(|s| s.as_ref())
+        .intersperse(",")
+        .collect::<String>(),
+      base_chain.order()
+    ));
     train(&mut chain, config.authored_mode, store.filter(channel, &config));
     log::info!("=> Saving {}.chain...", channel);
     save_model(

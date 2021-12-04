@@ -18,7 +18,7 @@ fn main() -> Result<()> {
       chain::sample(&chain, "", 16)
     } else {
       rl.add_history_entry(line);
-      println!("{}", chain.meta_data(line));
+      println!("{}", chain.word_meta_data(line));
       chain::sample(&chain, line, 16)
     };
     println!("{}", generated);

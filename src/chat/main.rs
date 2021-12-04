@@ -56,7 +56,16 @@ async fn run(config: Config) -> Result<()> {
                   let model_snapshot = config.model_path.metadata().and_then(|m| m.modified()).map(|time| {
                     chrono::DateTime::<chrono::Local>::from(time).with_timezone(&chrono::Utc).format("%F").to_string()
                   }).unwrap_or_else(|_| String::from("unknown"));
-                  conn.sender.privmsg(channel, &format!("{} (version: {})",model_name.to_string_lossy(), model_snapshot)).await?;
+                  let model_metadata = model.model_meta_data();
+                  conn.sender.privmsg(
+                    channel,
+                    &format!(
+                      "{} (version: {}, metadata: {})",
+                      model_name.to_string_lossy(),
+                      model_snapshot,
+                      if model_metadata.is_empty() { "none" } else { model_metadata }
+                    )
+                  ).await?;
                 },
                 Some(_) | None => ()
               }
