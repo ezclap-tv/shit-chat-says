@@ -44,7 +44,7 @@ async fn run(config: Config) -> Result<()> {
               let words = text.split_whitespace().skip(1).collect::<Vec<_>>();
               let response = match words.len() {
                 0 => chain::sample(&model, "", MAX_SAMPLES),
-                1 => chain::sample(&model, words[1], MAX_SAMPLES),
+                1 => chain::sample(&model, words[0], MAX_SAMPLES),
                 _ => chain::sample_seq(&model, &words, MAX_SAMPLES_FOR_SEQ_INPUT),
               };
               if !response.is_empty() {
