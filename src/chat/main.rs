@@ -69,6 +69,16 @@ async fn run(config: Config) -> Result<()> {
                     )
                   ).await?;
                 },
+                Some("?") => {
+                  let words = text.split_whitespace().skip(2).collect::<Vec<_>>();
+                  if !words.is_empty() {
+                    let word_metadata = model.phrase_meta_data(&words);
+                    conn.sender.privmsg(
+                      channel,
+                      &word_metadata.replace("\n", " "),
+                    ).await?;
+                  }
+                }
                 Some(_) | None => ()
               }
             }
