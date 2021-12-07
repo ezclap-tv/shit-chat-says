@@ -1,6 +1,6 @@
 use anyhow::Result;
 use serde::Deserialize;
-use std::fs;
+use std::{fs, time::Duration};
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct Config {
@@ -9,6 +9,19 @@ pub struct Config {
   #[serde(default = "std::path::PathBuf::new")]
   pub model_path: std::path::PathBuf,
   pub channels: Vec<String>,
+  #[serde(default = "default_reply_probability")]
+  pub reply_probability: f64,
+  #[serde(with = "humantime_serde")]
+  #[serde(default = "default_reply_timeout")]
+  pub reply_timeout: Duration,
+}
+
+const fn default_reply_probability() -> f64 {
+  0.0
+}
+
+const fn default_reply_timeout() -> Duration {
+  Duration::from_secs(60)
 }
 
 impl Config {

@@ -4,7 +4,8 @@ mod config;
 
 use anyhow::Result;
 use config::Config;
-use std::{env, path::PathBuf};
+use rand::Rng;
+use std::{env, ops::Sub, path::PathBuf};
 use twitch::Message;
 
 // Set to 0 to disable sampling.
@@ -17,13 +18,17 @@ async fn run(config: Config) -> Result<()> {
 
   log::info!("Connecting to Twitch");
   let mut conn = twitch::connect(config.clone().into()).await.unwrap();
-  // one sink per channel
+
+  let mut reply_times = std::collections::HashMap::with_capacity(config.channels.len());
   for channel in &config.channels {
     log::info!("Joining channel '{}'", channel);
     conn.sender.join(channel).await?;
+    reply_times.insert(channel.to_string(), std::time::Instant::now().sub(config.reply_timeout));
   }
+
   let prefix = format!("@{}", config.login.to_ascii_lowercase());
   let command_prefix = format!("${}", config.login.to_ascii_lowercase());
+
   log::info!("Chat bot is ready");
 
   loop {
@@ -81,8 +86,31 @@ async fn run(config: Config) -> Result<()> {
                 }
                 Some(_) | None => ()
               }
-            }
+            } else if let Some(true) = reply_times
+                .get(channel)
+                .map(|earlier| std::time::Instant::now().duration_since(*earlier) >= config.reply_timeout)
+              {
+                let prob = rand::thread_rng().gen_range(0.0..1f64);
+                if config.reply_probability > 0.0 {
+                  log::info!("[{channel}] [=REPLY MODE=] Rolled {prob} vs {}", config.reply_probability);
+                }
+                if prob >= config.reply_probability {
+                  *reply_times.get_mut(channel).unwrap() = std::time::Instant::now();
+                  continue;
+                }
 
+
+                let words = text.split_whitespace().collect::<Vec<_>>();
+                let response = match words.len() {
+                  1 => chain::sample(&model, words[0], MAX_SAMPLES),
+                  _ => chain::sample_seq(&model, &words, MAX_SAMPLES_FOR_SEQ_INPUT),
+                };
+
+                if !response.is_empty() && response != text.trim() && !text.starts_with(&response) {
+                  *reply_times.get_mut(channel).unwrap() = std::time::Instant::now();
+                  conn.sender.privmsg(channel, &format!("@{login} {response}")).await?;
+                }
+              }
           },
           _ => ()
         },
