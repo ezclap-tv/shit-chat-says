@@ -57,6 +57,9 @@ async fn run(config: Config) -> Result<()> {
               }
             } else if text.to_ascii_lowercase().starts_with(&command_prefix) {
               match text.split_whitespace().nth(1) {
+                Some("version") => {
+                  conn.sender.privmsg(channel, &format!("SCS v{}", env!("CARGO_PKG_VERSION"))).await?;
+                }
                 Some("model") => {
                   // Save to unwrap the filename here since the model has been successfully loaded.
                   let model_name = config.model_path.file_name().unwrap();
