@@ -14,6 +14,8 @@ pub struct Config {
   #[serde(with = "humantime_serde")]
   #[serde(default = "default_reply_timeout")]
   pub reply_timeout: Duration,
+  #[serde(default = "default_message_count")]
+  pub reply_after_messages: usize,
 }
 
 const fn default_reply_probability() -> f64 {
@@ -22,6 +24,10 @@ const fn default_reply_probability() -> f64 {
 
 const fn default_reply_timeout() -> Duration {
   Duration::from_secs(60)
+}
+
+const fn default_message_count() -> usize {
+  10
 }
 
 impl Config {

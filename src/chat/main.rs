@@ -12,6 +12,25 @@ use twitch::Message;
 const MAX_SAMPLES: usize = 4;
 const MAX_SAMPLES_FOR_SEQ_INPUT: usize = 16;
 
+struct ChannelReplyTracker {
+  reply_timer: std::time::Instant,
+  message_count: usize,
+}
+impl ChannelReplyTracker {
+  fn count_message(&mut self) {
+    self.message_count += 1;
+  }
+
+  fn after_reply(&mut self) {
+    self.message_count = 0;
+    self.reply_timer = std::time::Instant::now();
+  }
+
+  fn should_reply(&self, config: &Config) -> bool {
+    self.reply_timer.elapsed() >= config.reply_timeout && self.message_count >= config.reply_after_messages
+  }
+}
+
 async fn run(config: Config) -> Result<()> {
   log::info!("Loading model");
   let model = chain::load_chain_of_any_supported_order(&config.model_path)?;
@@ -23,7 +42,13 @@ async fn run(config: Config) -> Result<()> {
   for channel in &config.channels {
     log::info!("Joining channel '{}'", channel);
     conn.sender.join(channel).await?;
-    reply_times.insert(channel.to_string(), std::time::Instant::now().sub(config.reply_timeout));
+    reply_times.insert(
+      channel.to_string(),
+      ChannelReplyTracker {
+        reply_timer: std::time::Instant::now().sub(config.reply_timeout),
+        message_count: config.reply_after_messages,
+      },
+    );
   }
 
   let prefix = format!("@{}", config.login.to_ascii_lowercase());
@@ -89,16 +114,19 @@ async fn run(config: Config) -> Result<()> {
                 }
                 Some(_) | None => ()
               }
-            } else if let Some(true) = reply_times
-                .get(channel)
-                .map(|earlier| std::time::Instant::now().duration_since(*earlier) >= config.reply_timeout)
+            } else if let Some(tracker) = reply_times.get_mut(channel)
               {
+                tracker.count_message();
+                if !tracker.should_reply(&config) {
+                  continue;
+                }
+
                 let prob = rand::thread_rng().gen_range(0.0..1f64);
                 if config.reply_probability > 0.0 {
                   log::info!("[{channel}] [=REPLY MODE=] Rolled {prob} vs {}", config.reply_probability);
                 }
                 if prob >= config.reply_probability {
-                  *reply_times.get_mut(channel).unwrap() = std::time::Instant::now();
+                  tracker.after_reply();
                   continue;
                 }
 
@@ -110,7 +138,7 @@ async fn run(config: Config) -> Result<()> {
                 };
 
                 if !response.is_empty() && response != text.trim() && !text.starts_with(&response) {
-                  *reply_times.get_mut(channel).unwrap() = std::time::Instant::now();
+                  tracker.after_reply();
                   conn.sender.privmsg(channel, &format!("@{login} {response}")).await?;
                 }
               }
