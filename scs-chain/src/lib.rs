@@ -20,55 +20,16 @@ type WordId = DefaultSymbol;
 pub type Token = Option<WordId>;
 type Dict = StringInterner<BufferBackend<WordId>, RandomState>;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 struct EdgeId(usize);
 
 pub trait OrderOf<const ORDER: usize> {
   type Order;
 }
 
-// impl<const ORDER: usize> OrderOf<ORDER> for Token {}
-impl OrderOf<1> for Token {
-  type Order = (Token,);
-}
-impl OrderOf<2> for Token {
-  type Order = (Token, Token);
-}
-impl OrderOf<3> for Token {
-  type Order = (Token, Token, Token);
-}
-impl OrderOf<4> for Token {
-  type Order = (Token, Token, Token, Token);
-}
-
 trait KeyMaker<T> {
   type KeyToken;
   fn make_key(tup: T) -> Self::KeyToken;
-}
-
-impl KeyMaker<(Token, Token)> for Token {
-  type KeyToken = ([Token; 1], Token);
-
-  fn make_key(tup: (Token, Token)) -> Self::KeyToken {
-    let (a, b) = tup;
-    ([a], b)
-  }
-}
-impl KeyMaker<(Token, Token, Token)> for Token {
-  type KeyToken = ([Token; 2], Token);
-
-  fn make_key(tup: (Token, Token, Token)) -> Self::KeyToken {
-    let (a, b, c) = tup;
-    ([a, b], c)
-  }
-}
-impl KeyMaker<(Token, Token, Token, Token)> for Token {
-  type KeyToken = ([Token; 3], Token);
-
-  fn make_key(tup: (Token, Token, Token, Token)) -> Self::KeyToken {
-    let (a, b, c, d) = tup;
-    ([a, b, c], d)
-  }
 }
 
 #[macro_export]
@@ -97,18 +58,18 @@ struct EdgeMap {
 }
 
 pub trait TextGenerator {
+  fn order(&self) -> usize;
   fn generate_text(&self) -> String;
   fn generate_text_from_token(&self, word: &str) -> String;
   fn try_generate_text_from_token_sequence(&self, words: &[&str]) -> anyhow::Result<String>;
-  fn model_meta_data(&self) -> &str {
-    ""
-  }
-  fn phrase_meta_data(&self, _words: &[&str]) -> String {
-    String::new()
-  }
+  fn model_meta_data(&self) -> &str;
+  fn phrase_meta_data(&self, words: &[&str]) -> String;
 }
 
 impl TextGenerator for Box<dyn TextGenerator> {
+  fn order(&self) -> usize {
+    (**self).order()
+  }
   fn generate_text(&self) -> String {
     (**self).generate_text()
   }
@@ -117,6 +78,9 @@ impl TextGenerator for Box<dyn TextGenerator> {
   }
   fn try_generate_text_from_token_sequence(&self, words: &[&str]) -> anyhow::Result<String> {
     (**self).try_generate_text_from_token_sequence(words)
+  }
+  fn model_meta_data(&self) -> &str {
+    (**self).model_meta_data()
   }
   fn phrase_meta_data(&self, words: &[&str]) -> String {
     (**self).phrase_meta_data(words)
@@ -127,6 +91,10 @@ impl<const ORDER: usize> TextGenerator for Chain<ORDER>
 where
   Token: OrderOf<{ ORDER + 1 }>,
 {
+  fn order(&self) -> usize {
+    ORDER
+  }
+
   fn generate_text(&self) -> String {
     self.generate()
   }
@@ -173,7 +141,17 @@ pub fn load_chain_of_any_supported_order_with_reader<R: Read + Seek>(
   }
 }
 
+#[inline]
 pub fn sample(generator: &dyn TextGenerator, token: impl AsRef<str>, max_samples: usize) -> String {
+  _sample(generator, token, max_samples).0
+}
+
+#[inline]
+pub fn sample_seq(generator: &dyn TextGenerator, words: &[&str], max_samples: usize) -> String {
+  _sample_seq(generator, words, max_samples).0
+}
+
+pub fn _sample(generator: &dyn TextGenerator, token: impl AsRef<str>, max_samples: usize) -> (String, usize) {
   let mut count = 0;
   let token = token.as_ref().trim();
   let mut output = if token.is_empty() {
@@ -189,23 +167,23 @@ pub fn sample(generator: &dyn TextGenerator, token: impl AsRef<str>, max_samples
     };
     count += 1;
   }
-  output
+  (output, count)
 }
 
-pub fn sample_seq(generator: &dyn TextGenerator, words: &[&str], max_samples: usize) -> String {
+pub fn _sample_seq(generator: &dyn TextGenerator, words: &[&str], max_samples: usize) -> (String, usize) {
   let mut count = 0;
   let mut output = generator
     .try_generate_text_from_token_sequence(words)
     .ok()
     .unwrap_or_else(String::new);
-  while (output.trim().split_whitespace().count() <= 1 || output.trim() == words.join(",")) && count < max_samples {
+  while (output.trim().split_whitespace().count() <= 1 || output.trim() == words.join(" ")) && count < max_samples {
     output = generator
       .try_generate_text_from_token_sequence(words)
       .ok()
       .unwrap_or_else(String::new);
     count += 1;
   }
-  output
+  (output, count)
 }
 
 impl<const ORDER: usize> Chain<ORDER> {
@@ -560,7 +538,80 @@ impl<const ORDER: usize> WordStats<ORDER> {
 
 chain_of_order!(1);
 chain_of_order!(2);
-chain_of_order!(3);
+chain_of_order!(4);
+chain_of_order!(5);
+chain_of_order!(6);
+
+impl OrderOf<1> for Token {
+  type Order = (Token,);
+}
+impl OrderOf<2> for Token {
+  type Order = (Token, Token);
+}
+impl OrderOf<3> for Token {
+  type Order = (Token, Token, Token);
+}
+impl OrderOf<4> for Token {
+  type Order = (Token, Token, Token, Token);
+}
+impl OrderOf<5> for Token {
+  type Order = (Token, Token, Token, Token, Token);
+}
+impl OrderOf<6> for Token {
+  type Order = (Token, Token, Token, Token, Token, Token);
+}
+impl OrderOf<7> for Token {
+  type Order = (Token, Token, Token, Token, Token, Token, Token);
+}
+
+impl KeyMaker<(Token, Token)> for Token {
+  type KeyToken = ([Token; 1], Token);
+
+  fn make_key(tup: (Token, Token)) -> Self::KeyToken {
+    let (a, b) = tup;
+    ([a], b)
+  }
+}
+impl KeyMaker<(Token, Token, Token)> for Token {
+  type KeyToken = ([Token; 2], Token);
+
+  fn make_key(tup: (Token, Token, Token)) -> Self::KeyToken {
+    let (a, b, c) = tup;
+    ([a, b], c)
+  }
+}
+impl KeyMaker<(Token, Token, Token, Token)> for Token {
+  type KeyToken = ([Token; 3], Token);
+
+  fn make_key(tup: (Token, Token, Token, Token)) -> Self::KeyToken {
+    let (a, b, c, d) = tup;
+    ([a, b, c], d)
+  }
+}
+impl KeyMaker<(Token, Token, Token, Token, Token)> for Token {
+  type KeyToken = ([Token; 4], Token);
+
+  fn make_key(tup: (Token, Token, Token, Token, Token)) -> Self::KeyToken {
+    let (a, b, c, d, e) = tup;
+    ([a, b, c, d], e)
+  }
+}
+impl KeyMaker<(Token, Token, Token, Token, Token, Token)> for Token {
+  type KeyToken = ([Token; 5], Token);
+
+  fn make_key(tup: (Token, Token, Token, Token, Token, Token)) -> Self::KeyToken {
+    let (a, b, c, d, e, f) = tup;
+    ([a, b, c, d, e], f)
+  }
+}
+impl KeyMaker<(Token, Token, Token, Token, Token, Token, Token)> for Token {
+  type KeyToken = ([Token; 6], Token);
+
+  fn make_key(tup: (Token, Token, Token, Token, Token, Token, Token)) -> Self::KeyToken {
+    let (a, b, c, d, e, f, g) = tup;
+    ([a, b, c, d, e, f], g)
+  }
+}
 
 #[cfg(test)]
 mod tests {

@@ -1,5 +1,3 @@
-#![feature(format_args_capture)]
-
 mod config;
 
 use anyhow::Result;
