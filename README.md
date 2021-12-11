@@ -1,6 +1,6 @@
 # shit-chat-says
 
-Markov chain that can be easily trained on Chatterino logs, and a prompt to generate messages from it.
+A set of services for collecting Twitch chat logs, training a Markov chain on them, and a chat bot to generate messages from said chat bot.
 
 ### Usage
 
