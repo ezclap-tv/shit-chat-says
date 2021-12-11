@@ -12,33 +12,42 @@ use twitch::Message;
 
 // TODO: handle TMI restarts + disconnections with retry
 
+#[cfg(target_family = "windows")]
+use tokio::signal::ctrl_c as stop_signal;
+
+#[cfg(target_family = "unix")]
+async fn stop_signal() -> std::io::Result<()> {
+  let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?; // SIGTERM for docker-compose down
+  let mut sigint = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?; // SIGINT for ctrl-c
+
+  let sigterm = sigterm.recv();
+  let sigint = sigint.recv();
+
+  tokio::select! {
+    _ = sigterm => Ok(()),
+    _ = sigint => Ok(()),
+  }
+}
+
 async fn run(config: Config) -> Result<()> {
   'stop: loop {
     log::info!("Connecting to Twitch");
     let mut conn = twitch::connect(config.clone().into()).await.unwrap();
     // one sink per channel
     let mut sinks = HashMap::<String, sink::DailyLogSink>::with_capacity(config.channels.len());
-    for channel in config.channels.into_iter() {
+    for channel in config.channels.iter() {
       log::info!("Initializing sink for {}", channel.name);
       conn.sender.join(&channel.name).await?;
       sinks.insert(
         channel.name.clone(),
-        sink::DailyLogSink::new(config.output_directory.clone(), channel.name, channel.buffer)?,
+        sink::DailyLogSink::new(config.output_directory.clone(), channel.name.clone(), channel.buffer)?,
       );
     }
     log::info!("Logger is ready");
 
-    #[cfg(target_os = "windows")]
-    let stop = tokio::signal::ctrl_c();
-    #[cfg(not(target_os = "windows"))]
-    let stop = tokio::join!(
-      tokio::signal::signal(tokio::signal::SignalKind::terminate()), // SIGTERM for docker-compose down
-      tokio::signal::signal(tokio::signal::SignalKind::interrupt())  // SIGINT for ctrl-c
-    );
-
     loop {
       tokio::select! {
-        _ = stop => {
+        _ = stop_signal() => {
           log::info!("Process terminated");
           break 'stop;
         },
@@ -54,9 +63,9 @@ async fn run(config: Config) -> Result<()> {
             _ => ()
           },
           // recoverable error, reconnect
-          Err(twitch::conn::Error::StreamClosed) => break;
+          Err(twitch::conn::Error::StreamClosed) => break,
           // fatal error
-          Err(err) => break 'stop;
+          Err(err) => { log::error!("Fatal error: {}", err); break 'stop; }
         }
       }
     }

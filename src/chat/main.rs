@@ -31,6 +31,23 @@ impl ChannelReplyTracker {
   }
 }
 
+#[cfg(target_family = "windows")]
+use tokio::signal::ctrl_c as stop_signal;
+
+#[cfg(target_family = "unix")]
+async fn stop_signal() -> std::io::Result<()> {
+  let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?; // SIGTERM for docker-compose down
+  let mut sigint = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?; // SIGINT for ctrl-c
+
+  let sigterm = sigterm.recv();
+  let sigint = sigint.recv();
+
+  tokio::select! {
+    _ = sigterm => Ok(()),
+    _ = sigint => Ok(()),
+  }
+}
+
 async fn run(config: Config) -> Result<()> {
   log::info!("Loading model");
   let model = chain::load_chain_of_any_supported_order(&config.model_path)?;
@@ -55,19 +72,11 @@ async fn run(config: Config) -> Result<()> {
     let prefix = format!("@{}", config.login.to_ascii_lowercase());
     let command_prefix = format!("${}", config.login.to_ascii_lowercase());
 
-    #[cfg(target_os = "windows")]
-    let stop = tokio::signal::ctrl_c();
-    #[cfg(not(target_os = "windows"))]
-    let stop = tokio::join!(
-      tokio::signal::signal(tokio::signal::SignalKind::terminate()), // SIGTERM for docker-compose down
-      tokio::signal::signal(tokio::signal::SignalKind::interrupt())  // SIGINT for ctrl-c
-    );
-
     log::info!("Chat bot is ready");
 
     loop {
       tokio::select! {
-        _ = stop => {
+        _ = stop_signal() => {
           log::info!("Process terminated");
           break 'stop Ok(());
         },
@@ -155,9 +164,9 @@ async fn run(config: Config) -> Result<()> {
             _ => ()
           },
           // recoverable error, reconnect
-          Err(twitch::conn::Error::StreamClosed) => break;
+          Err(twitch::conn::Error::StreamClosed) => break,
           // fatal error
-          Err(err) => break 'stop;
+          Err(_) => break 'stop Ok(()),
         }
       }
     }

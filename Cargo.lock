@@ -1332,6 +1332,7 @@ dependencies = [
  "criterion",
  "crossbeam-channel",
  "env_logger",
+ "futures",
  "humantime-serde",
  "indicatif",
  "itertools 0.10.1",

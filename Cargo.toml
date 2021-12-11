@@ -53,6 +53,7 @@ rand = "0.8.4"
 string-interner = "0.14.0"
 itertools = "0.10.1"
 humantime-serde = "1.0.1"
+futures = "0.3.18"
 
 [dev-dependencies]
 criterion = "0.3.5"
