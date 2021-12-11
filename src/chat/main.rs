@@ -135,7 +135,7 @@ async fn run(config: Config) -> Result<()> {
               } else if let Some(tracker) = reply_times.get_mut(channel)
                 {
                   tracker.count_message();
-                  if !tracker.should_reply(&config) {
+                  if !tracker.should_reply(&config) || config.reply_blocklist.contains(&login.to_ascii_lowercase()) {
                     continue;
                   }
 

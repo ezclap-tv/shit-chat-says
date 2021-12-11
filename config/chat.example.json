@@ -5,5 +5,11 @@
     "your_channel_name",
     "a_different_channel_name"
   ],
+  "reply_probability": 1.00,
+  "reply_timeout": "60s",
+  "reply_after_messages": 20,
+  "reply_blocklist": [
+    "streamelements"
+  ],
   "model_path": "/path/to/model.yaml"
 }

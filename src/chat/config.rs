@@ -16,6 +16,8 @@ pub struct Config {
   pub reply_timeout: Duration,
   #[serde(default = "default_message_count")]
   pub reply_after_messages: usize,
+  #[serde(default = "std::collections::HashSet::new")]
+  pub reply_blocklist: std::collections::HashSet<String>,
 }
 
 const fn default_reply_probability() -> f64 {
@@ -32,12 +34,17 @@ const fn default_message_count() -> usize {
 
 impl Config {
   pub fn load<P: AsRef<std::path::Path>>(path: P) -> Result<Self> {
-    let config = serde_json::from_str::<Config>(
+    let mut config = serde_json::from_str::<Config>(
       &fs::read_to_string(path.as_ref()).map_err(|_| anyhow::anyhow!("Could not read 'chat.json' config file"))?,
     )?;
     if config.channels.is_empty() {
       anyhow::bail!("config.channels is empty, exiting.");
     }
+    config.reply_blocklist = config
+      .reply_blocklist
+      .into_iter()
+      .map(|s| s.to_ascii_lowercase())
+      .collect();
     Ok(config)
   }
 }
