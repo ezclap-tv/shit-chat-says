@@ -15,6 +15,7 @@ use tokio::sync::RwLock;
 
 mod loaders;
 mod schema;
+mod v1;
 
 const MAX_SAMPLES: usize = 16;
 
@@ -237,10 +238,13 @@ async fn main() -> std::io::Result<()> {
     .join("models");
   let context = SharedContext::new(Context::new(log_dir, model_dir));
 
+  let v1_ctx = v1::ctx::Context::default();
+
   let server = HttpServer::new(move || {
     App::new()
       .app_data(Data::new(schema::schema()))
       .app_data(Data::new(context.clone()))
+      .app_data(Data::new(v1_ctx.clone()))
       .wrap(
         Cors::default()
           .allow_any_origin()
@@ -261,6 +265,7 @@ async fn main() -> std::io::Result<()> {
       .service(web::resource("/playground").route(web::get().to(playground_route)))
       // TODO: disable this in production
       .service(web::resource("/graphiql").route(web::get().to(graphiql_route)))
+      .service(v1::routes())
   });
   server.bind("127.0.0.1:8080").unwrap().run().await
 }
