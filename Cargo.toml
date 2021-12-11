@@ -8,12 +8,9 @@ edition = "2018"
 [workspace]
 members = [
     "scs-explorer-backend",
+    "scs-chain",
     ".",
 ]
-
-[lib]
-name = "chain"
-path = "src/chain/lib.rs"
 
 [[bin]]
 name = "train"
@@ -34,12 +31,9 @@ path = "src/chat/main.rs"
 [features]
 "no-progress" = []
 
-[[bench]]
-name = "chains"
-harness = false
 
 [dependencies]
-markov = "1.1.0"
+scs-chain = { path = "./scs-chain" }
 anyhow = "1.0.48"
 rustyline = "9.0.0"
 tokio = { version = "1.14.0", features = ["full"] }
@@ -56,11 +50,7 @@ lazy_static = "1.4.0"
 indicatif = "0.16.2"
 ahash = "0.7.6"
 rand = "0.8.4"
-string-interner = "0.14.0"
 itertools = "0.10.1"
 humantime-serde = "1.0.1"
 futures = "0.3.18"
 
-[dev-dependencies]
-criterion = "0.3.5"
-serde_yaml = "0.8.21"

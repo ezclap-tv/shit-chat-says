@@ -26,5 +26,4 @@ chrono = "0.4.19"
 serde = "1.0.131"
 base64 = "0.13.0"
 
-shit-chat-says = { path = ".." }
-
+scs-chain = { path = "../scs-chain" }

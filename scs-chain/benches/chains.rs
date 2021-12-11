@@ -2,7 +2,7 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
 fn read_logs() -> Vec<String> {
   let mut output = Vec::new();
-  for entry in std::fs::read_dir("logs/ambadev").unwrap() {
+  for entry in std::fs::read_dir("../logs/ambadev").unwrap() {
     let entry = entry.unwrap();
     output.push(std::fs::read_to_string(entry.path()).unwrap());
   }
