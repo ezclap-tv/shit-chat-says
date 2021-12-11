@@ -97,6 +97,7 @@ struct EdgeMap {
 }
 
 pub trait TextGenerator {
+  fn order(&self) -> usize;
   fn generate_text(&self) -> String;
   fn generate_text_from_token(&self, word: &str) -> String;
   fn try_generate_text_from_token_sequence(&self, words: &[&str]) -> anyhow::Result<String>;
@@ -109,6 +110,9 @@ pub trait TextGenerator {
 }
 
 impl TextGenerator for Box<dyn TextGenerator> {
+  fn order(&self) -> usize {
+    (**self).order()
+  }
   fn generate_text(&self) -> String {
     (**self).generate_text()
   }
@@ -117,6 +121,9 @@ impl TextGenerator for Box<dyn TextGenerator> {
   }
   fn try_generate_text_from_token_sequence(&self, words: &[&str]) -> anyhow::Result<String> {
     (**self).try_generate_text_from_token_sequence(words)
+  }
+  fn model_meta_data(&self) -> &str {
+    (**self).model_meta_data()
   }
   fn phrase_meta_data(&self, words: &[&str]) -> String {
     (**self).phrase_meta_data(words)
@@ -127,6 +134,10 @@ impl<const ORDER: usize> TextGenerator for Chain<ORDER>
 where
   Token: OrderOf<{ ORDER + 1 }>,
 {
+  fn order(&self) -> usize {
+    ORDER
+  }
+
   fn generate_text(&self) -> String {
     self.generate()
   }
@@ -173,7 +184,17 @@ pub fn load_chain_of_any_supported_order_with_reader<R: Read + Seek>(
   }
 }
 
+#[inline]
 pub fn sample(generator: &dyn TextGenerator, token: impl AsRef<str>, max_samples: usize) -> String {
+  _sample(generator, token, max_samples).0
+}
+
+#[inline]
+pub fn sample_seq(generator: &dyn TextGenerator, words: &[&str], max_samples: usize) -> String {
+  _sample_seq(generator, words, max_samples).0
+}
+
+pub fn _sample(generator: &dyn TextGenerator, token: impl AsRef<str>, max_samples: usize) -> (String, usize) {
   let mut count = 0;
   let token = token.as_ref().trim();
   let mut output = if token.is_empty() {
@@ -189,23 +210,23 @@ pub fn sample(generator: &dyn TextGenerator, token: impl AsRef<str>, max_samples
     };
     count += 1;
   }
-  output
+  (output, count)
 }
 
-pub fn sample_seq(generator: &dyn TextGenerator, words: &[&str], max_samples: usize) -> String {
+pub fn _sample_seq(generator: &dyn TextGenerator, words: &[&str], max_samples: usize) -> (String, usize) {
   let mut count = 0;
   let mut output = generator
     .try_generate_text_from_token_sequence(words)
     .ok()
     .unwrap_or_else(String::new);
-  while (output.trim().split_whitespace().count() <= 1 || output.trim() == words.join(",")) && count < max_samples {
+  while (output.trim().split_whitespace().count() <= 1 || output.trim() == words.join(" ")) && count < max_samples {
     output = generator
       .try_generate_text_from_token_sequence(words)
       .ok()
       .unwrap_or_else(String::new);
     count += 1;
   }
-  output
+  (output, count)
 }
 
 impl<const ORDER: usize> Chain<ORDER> {

@@ -1,5 +1,3 @@
-#![feature(format_args_capture)]
-
 pub mod config;
 pub mod sink;
 
