@@ -79,14 +79,14 @@ impl State {
     }
 
     if found_last_read_file {
-      // we read till the end but didn't get more than `PAGE_SIZE` lines
-      Ok(Some((
-        messages,
-        base64::encode(current_file.file_name().unwrap().to_string_lossy().as_bytes()),
-      )))
-    } else {
-      Ok(None)
+      let current_file = current_file.file_name().map(|v| v.to_string_lossy());
+      if let Some(current_file) = current_file {
+        // we read till the end but didn't get more than `PAGE_SIZE` lines
+        return Ok(Some((messages, base64::encode(current_file.as_bytes()))));
+      }
     }
+
+    Ok(None)
   }
 
   /// Returns a list of available models

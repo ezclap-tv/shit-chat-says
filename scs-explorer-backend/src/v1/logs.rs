@@ -26,12 +26,12 @@ pub async fn get_channel_logs(
   query: web::Query<ChannelLogsQuery>,
 ) -> Result<impl Responder> {
   log::info!("channel {:?}, query {:?}", channel, query.0);
-  Ok(
+  Ok(web::Json(
     ctx
       .read()
       .await
       .get_logs(&*channel, query.page.as_deref())
       .await?
-      .map(|(messages, page)| web::Json(ChannelLogsResponse { messages, page })),
-  )
+      .map(|(messages, page)| ChannelLogsResponse { messages, page }),
+  ))
 }
