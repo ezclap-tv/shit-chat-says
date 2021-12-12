@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 
-#[derive(sqlx::FromRow)]
+#[derive(Debug, sqlx::FromRow)]
 pub struct Entry {
   id: i32,
   channel: String,
@@ -27,39 +27,80 @@ impl Entry {
     }
   }
 
+  #[inline]
   pub fn is_valid(&self) -> bool {
     self.id > -1
   }
 
+  #[inline]
   pub fn id(&self) -> i32 {
     self.id
   }
+  #[inline]
   pub fn channel(&self) -> &str {
     &self.channel
   }
+  #[inline]
   pub fn chatter(&self) -> &str {
     &self.chatter
   }
+  #[inline]
   pub fn sent_at(&self) -> &DateTime<Utc> {
     &self.sent_at
   }
+  #[inline]
   pub fn message(&self) -> &str {
     &self.message
   }
 
-  pub async fn insert(
-    executor: impl sqlx::PgExecutor<'_> + Copy,
-    entries: impl Iterator<Item = &Entry>,
-  ) -> sqlx::Result<()> {
-    for entry in entries {
-      sqlx::query("INSERT INTO logs (channel, chatter, sent_at, message) VALUES ($1, $2, $3, $4)")
-        .bind(entry.channel())
-        .bind(entry.chatter())
-        .bind(entry.sent_at())
-        .bind(entry.message())
-        .execute(executor)
-        .await?;
+  /// Insert a single log entry
+  pub async fn insert_one(executor: impl sqlx::PgExecutor<'_> + Copy, entry: &Entry) -> sqlx::Result<()> {
+    let _ = sqlx::query(
+      "
+    INSERT INTO logs (channel, chatter, sent_at, message)
+    VALUES ($1, $2, $3, $4)
+    ",
+    )
+    .bind(&entry.channel)
+    .bind(&entry.chatter)
+    .bind(&entry.sent_at)
+    .bind(&entry.message)
+    .execute(executor)
+    .await?;
+    Ok(())
+  }
+
+  /// Insert log entries in batch mode (efficient for large inserts)
+  ///
+  /// `entries` will be cleared
+  pub async fn insert_soa(executor: impl sqlx::PgExecutor<'_> + Copy, entries: Vec<Entry>) -> sqlx::Result<()> {
+    let (mut channel, mut chatter, mut sent_at, mut message) = (
+      Vec::<String>::with_capacity(entries.len()),
+      Vec::<String>::with_capacity(entries.len()),
+      Vec::<DateTime<Utc>>::with_capacity(entries.len()),
+      Vec::<String>::with_capacity(entries.len()),
+    );
+
+    for entry in entries.into_iter() {
+      channel.push(entry.channel);
+      chatter.push(entry.chatter);
+      sent_at.push(entry.sent_at);
+      message.push(entry.message);
     }
+
+    sqlx::query(
+      "
+    INSERT INTO logs (channel, chatter, sent_at, message)
+    SELECT * FROM UNNEST($1, $2, $3, $4)
+    ",
+    )
+    .bind(&channel)
+    .bind(&chatter)
+    .bind(&sent_at)
+    .bind(&message)
+    .execute(executor)
+    .await?;
+
     Ok(())
   }
 

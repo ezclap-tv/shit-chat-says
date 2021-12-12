@@ -241,7 +241,7 @@ async fn main() -> anyhow::Result<()> {
   let v1_ctx = v1::ctx::Context::new(
     log_dir,
     model_dir,
-    db::connect("scs", "127.0.0.1", 5432, Some(("postgres", "root"))).await?,
+    db::connect(("scs", "127.0.0.1", 5432, "postgres", Some("root"))).await?,
   );
 
   let server = HttpServer::new(move || {

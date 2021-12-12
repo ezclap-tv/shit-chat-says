@@ -30,12 +30,17 @@ path = "src/collector/main.rs"
 name = "chat"
 path = "src/chat/main.rs"
 
+[[bin]]
+name = "ingest"
+path = "src/ingest/main.rs"
+
 [features]
 "no-progress" = []
 
 
 [dependencies]
 scs-chain = { path = "./scs-chain" }
+scs-db = { path = "./scs-db" }
 anyhow = "1.0.48"
 rustyline = "9.0.0"
 tokio = { version = "1.14.0", features = ["full"] }
@@ -55,4 +60,5 @@ rand = "0.8.4"
 itertools = "0.10.1"
 humantime-serde = "1.0.1"
 futures = "0.3.18"
+structopt = "0.3.25"
 
