@@ -10,3 +10,4 @@ chat.test.json
 train.json
 train.test.json
 .vscode
+ci-api.json

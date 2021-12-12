@@ -1,0 +1,5 @@
+{
+    "compose_file": "../docker/docker-compose.yml",
+    "project_source_folder": "..",
+    "access_tokens": []
+}
