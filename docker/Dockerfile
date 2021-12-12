@@ -13,13 +13,19 @@ RUN chown rust:rust -R $HOME
 
 
 # Copy the code and Cargo metamodels files into the image
-COPY ./src        $HOME/app/src
-COPY ./benches    $HOME/app/benches
-COPY ./Cargo.lock $HOME/app/Cargo.lock
-COPY ./Cargo.toml $HOME/app/Cargo.toml
+COPY ./Cargo.lock            $HOME/app/Cargo.lock
+COPY ./Cargo.toml            $HOME/app/Cargo.toml
+COPY ./src                   $HOME/app/src
+COPY ./scs-chain             $HOME/app/scs-chain
+COPY ./scs-ci-api            $HOME/app/scs-ci-api
+COPY ./scs-explorer-backend  $HOME/app/scs-explorer-backend
+
 
 # Make /app the CWD
 WORKDIR /home/rust/app
+
+# Install OpenSSL
+RUN apt-get update && apt-get install -y pkg-config libssl-dev g++
 
 # By default, build for the current cpu
 ENV RUSTFLAGS "-C target-cpu=native"
