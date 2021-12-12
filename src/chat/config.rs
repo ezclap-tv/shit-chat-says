@@ -49,11 +49,11 @@ impl Config {
   }
 }
 
-impl From<Config> for twitch::conn::Config {
+impl From<Config> for twitch::tmi::conn::Config {
   fn from(config: Config) -> Self {
-    twitch::conn::Config {
+    twitch::tmi::conn::Config {
       membership_data: false,
-      credentials: twitch::conn::Login::Regular {
+      credentials: twitch::tmi::conn::Login::Regular {
         login: config.login,
         token: config.token,
       },

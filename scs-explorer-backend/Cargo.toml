@@ -27,3 +27,4 @@ serde = "1.0.131"
 base64 = "0.13.0"
 
 scs-chain = { path = "../scs-chain" }
+scs-db = { path = "../scs-db" }

@@ -6,7 +6,7 @@ use config::Config;
 use std::collections::HashMap;
 use std::env;
 use std::io::Write;
-use twitch::Message;
+use twitch::tmi::Message;
 
 // TODO: handle TMI restarts + disconnections with retry
 
@@ -30,7 +30,7 @@ async fn stop_signal() -> std::io::Result<()> {
 async fn run(config: Config) -> Result<()> {
   'stop: loop {
     log::info!("Connecting to Twitch");
-    let mut conn = twitch::connect(config.clone().into()).await.unwrap();
+    let mut conn = twitch::tmi::connect(config.clone().into()).await.unwrap();
     // one sink per channel
     let mut sinks = HashMap::<String, sink::DailyLogSink>::with_capacity(config.channels.len());
     for channel in config.channels.iter() {
@@ -61,7 +61,7 @@ async fn run(config: Config) -> Result<()> {
             _ => ()
           },
           // recoverable error, reconnect
-          Err(twitch::conn::Error::StreamClosed) => break,
+          Err(twitch::tmi::conn::Error::StreamClosed) => break,
           // fatal error
           Err(err) => { log::error!("Fatal error: {}", err); break 'stop; }
         }

@@ -4,7 +4,7 @@ use anyhow::Result;
 use config::Config;
 use rand::Rng;
 use std::{env, ops::Sub, path::PathBuf};
-use twitch::Message;
+use twitch::tmi::Message;
 
 // Set to 0 to disable sampling.
 const MAX_SAMPLES: usize = 4;
@@ -52,7 +52,7 @@ async fn run(config: Config) -> Result<()> {
 
   'stop: loop {
     log::info!("Connecting to Twitch");
-    let mut conn = twitch::connect(config.clone().into()).await.unwrap();
+    let mut conn = twitch::tmi::connect(config.clone().into()).await.unwrap();
 
     let mut reply_times = std::collections::HashMap::with_capacity(config.channels.len());
     for channel in &config.channels {
@@ -162,7 +162,7 @@ async fn run(config: Config) -> Result<()> {
             _ => ()
           },
           // recoverable error, reconnect
-          Err(twitch::conn::Error::StreamClosed) => break,
+          Err(twitch::tmi::conn::Error::StreamClosed) => break,
           // fatal error
           Err(_) => break 'stop Ok(()),
         }

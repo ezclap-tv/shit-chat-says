@@ -1,4 +1,5 @@
 use actix_web::Result;
+use db::Database;
 use futures::{io::BufReader, AsyncBufReadExt, TryStreamExt};
 use std::{path::PathBuf, sync::Arc};
 use tokio::sync::RwLock;
@@ -6,13 +7,22 @@ use tokio::sync::RwLock;
 pub const PAGE_SIZE: usize = 100;
 
 pub struct State {
-  pub logs_dir: PathBuf,
-  pub models_dir: PathBuf,
+  logs_dir: PathBuf,
+  models_dir: PathBuf,
+  db: Database,
 }
 
 impl State {
-  pub fn new(logs_dir: PathBuf, models_dir: PathBuf) -> Self {
-    Self { logs_dir, models_dir }
+  pub fn new(logs_dir: PathBuf, models_dir: PathBuf, db: Database) -> Self {
+    Self {
+      logs_dir,
+      models_dir,
+      db,
+    }
+  }
+
+  pub fn db(&self) -> &Database {
+    &self.db
   }
 
   /// Returns a list of channel names for which logs are available
@@ -100,25 +110,12 @@ impl State {
   }
 }
 
-impl Default for State {
-  fn default() -> Self {
-    Self {
-      logs_dir: std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("..")
-        .join("logs"),
-      models_dir: std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("..")
-        .join("models"),
-    }
-  }
-}
-
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct Context(Arc<RwLock<State>>);
 
 impl Context {
-  pub fn new(ctx: State) -> Self {
-    Self(Arc::new(RwLock::new(ctx)))
+  pub fn new(logs_dir: PathBuf, models_dir: PathBuf, db: Database) -> Self {
+    Self(Arc::new(RwLock::new(State::new(logs_dir, models_dir, db))))
   }
 
   pub async fn read(&self) -> tokio::sync::RwLockReadGuard<'_, State> {

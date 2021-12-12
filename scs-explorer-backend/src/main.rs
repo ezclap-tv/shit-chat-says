@@ -224,7 +224,7 @@ async fn graphql_route(
 }
 
 #[actix_web::main]
-async fn main() -> std::io::Result<()> {
+async fn main() -> anyhow::Result<()> {
   if std::env::var("RUST_LOG").is_err() {
     env::set_var("RUST_LOG", "info");
   }
@@ -236,9 +236,13 @@ async fn main() -> std::io::Result<()> {
   let model_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
     .join("..")
     .join("models");
-  let context = SharedContext::new(Context::new(log_dir, model_dir));
+  let context = SharedContext::new(Context::new(log_dir.clone(), model_dir.clone()));
 
-  let v1_ctx = v1::ctx::Context::default();
+  let v1_ctx = v1::ctx::Context::new(
+    log_dir,
+    model_dir,
+    db::connect(("scs", "127.0.0.1", 5432, "postgres", Some("root"))).await?,
+  );
 
   let server = HttpServer::new(move || {
     App::new()
@@ -267,5 +271,7 @@ async fn main() -> std::io::Result<()> {
       .service(web::resource("/graphiql").route(web::get().to(graphiql_route)))
       .service(v1::routes())
   });
-  server.bind("127.0.0.1:8080").unwrap().run().await
+  server.bind("127.0.0.1:8080").unwrap().run().await?;
+
+  Ok(())
 }
