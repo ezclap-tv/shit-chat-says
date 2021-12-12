@@ -86,10 +86,7 @@ macro_rules! rep {
   ($t:expr, 4096) => {
     rep!(rep!($t, 1024), 4)
   };
-  ($t:expr, 16384) => {
-    rep!(rep!($t, 4096), 4)
-  };
 }
 
 #[cfg(feature = "cloudflare-hack")]
-pub const CLOUDFLARE_PADDING: &str = rep!("\u{200B}", 16384);
+pub const CLOUDFLARE_PADDING: &str = rep!("\u{200B}", 4096);
