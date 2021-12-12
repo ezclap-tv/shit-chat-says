@@ -10,6 +10,7 @@ members = [
     "scs-ci-api",
     "scs-explorer-backend",
     "scs-chain",
+    "scs-db",
     ".",
 ]
 
