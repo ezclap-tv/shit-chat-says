@@ -3494,6 +3494,7 @@ version = "0.0.1"
 dependencies = [
  "actix",
  "chrono",
+ "env_logger",
  "futures",
  "log",
  "sqlx",
