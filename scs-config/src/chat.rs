@@ -1,11 +1,9 @@
-use anyhow::Result;
 use serde::Deserialize;
-use std::{fs, time::Duration};
+use std::time::Duration;
 
 #[derive(Clone, Debug, Deserialize)]
-pub struct Config {
-  pub login: String,
-  pub token: String,
+pub struct ChatConfig {
+  pub credentials: crate::TwitchLogin,
   #[serde(default = "std::path::PathBuf::new")]
   pub model_path: std::path::PathBuf,
   pub channels: Vec<String>,
@@ -20,6 +18,20 @@ pub struct Config {
   pub reply_blocklist: std::collections::HashSet<String>,
 }
 
+impl Default for ChatConfig {
+  fn default() -> Self {
+    Self {
+      credentials: crate::TwitchLogin::default(),
+      model_path: std::path::PathBuf::new(),
+      channels: vec![],
+      reply_probability: default_reply_probability(),
+      reply_timeout: default_reply_timeout(),
+      reply_after_messages: default_message_count(),
+      reply_blocklist: std::collections::HashSet::new(),
+    }
+  }
+}
+
 const fn default_reply_probability() -> f64 {
   0.0
 }
@@ -32,31 +44,14 @@ const fn default_message_count() -> usize {
   10
 }
 
-impl Config {
-  pub fn load<P: AsRef<std::path::Path>>(path: P) -> Result<Self> {
-    let mut config = serde_json::from_str::<Config>(
-      &fs::read_to_string(path.as_ref()).map_err(|_| anyhow::anyhow!("Could not read 'chat.json' config file"))?,
-    )?;
-    if config.channels.is_empty() {
-      anyhow::bail!("config.channels is empty, exiting.");
-    }
+impl ChatConfig {
+  pub fn validate(self) -> anyhow::Result<Self> {
+    let mut config = self;
     config.reply_blocklist = config
       .reply_blocklist
       .into_iter()
       .map(|s| s.to_ascii_lowercase())
       .collect();
     Ok(config)
-  }
-}
-
-impl From<Config> for twitch::tmi::conn::Config {
-  fn from(config: Config) -> Self {
-    twitch::tmi::conn::Config {
-      membership_data: false,
-      credentials: twitch::tmi::conn::Login::Regular {
-        login: config.login,
-        token: config.token,
-      },
-    }
   }
 }

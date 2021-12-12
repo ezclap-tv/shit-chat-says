@@ -5,13 +5,12 @@ use std::fs;
 
 use anyhow::Result;
 use chrono::Utc;
-use config::TrainingConfig;
+use scs_config::{GlobalConfig, TrainingConfig};
+
 use walkdir::WalkDir;
 
 #[cfg(not(feature = "no-progress"))]
 use indicatif::ProgressBar;
-
-mod config;
 
 fn split_line(line: &str) -> Option<(&str, &str)> {
   if !line.trim().is_empty() {
@@ -43,7 +42,7 @@ impl LogStore {
   pub fn filter<'this>(
     &'this self,
     channel: &'this str,
-    config: &'this config::TrainingConfig,
+    config: &'this TrainingConfig,
   ) -> impl Iterator<Item = &'this str> {
     config
       .channels
@@ -150,9 +149,11 @@ fn main() -> Result<()> {
   env_logger::init();
 
   let config = if let Some(path) = env::args().nth(1) {
-    config::TrainingConfig::load(&std::path::PathBuf::from(path))?
+    GlobalConfig::load(&std::path::PathBuf::from(path))?
+      .train
+      .expect("train requires a valid training config")
   } else {
-    config::TrainingConfig::default()
+    TrainingConfig::default()
   };
   log::info!("Loaded config {:?}", config);
 

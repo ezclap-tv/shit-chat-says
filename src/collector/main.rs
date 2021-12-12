@@ -1,8 +1,6 @@
-pub mod config;
 pub mod sink;
 
 use anyhow::Result;
-use config::Config;
 use std::collections::HashMap;
 use std::env;
 use std::io::Write;
@@ -27,7 +25,20 @@ async fn stop_signal() -> std::io::Result<()> {
   }
 }
 
-async fn run(config: Config) -> Result<()> {
+fn make_config(c: scs_config::CollectorConfig) -> twitch::conn::Config {
+  twitch::conn::Config {
+    credentials: match c.credentials {
+      Some(info) => twitch::conn::Login::Regular {
+        login: info.login,
+        token: info.token,
+      },
+      None => twitch::conn::Login::Anonymous,
+    },
+    membership_data: false,
+  }
+}
+
+async fn run(config: scs_config::CollectorConfig) -> Result<()> {
   'stop: loop {
     log::info!("Connecting to Twitch");
     let mut conn = twitch::tmi::connect(config.clone().into()).await.unwrap();
@@ -85,11 +96,14 @@ async fn main() -> Result<()> {
   }
   env_logger::try_init()?;
 
-  let config = self::Config::load(&env::args().nth(1).map(std::path::PathBuf::from).unwrap_or_else(|| {
-    std::path::PathBuf::from(CARGO_MANIFEST_DIR)
-      .join("config")
-      .join("collector.json")
-  }))?;
+  let config =
+    scs_config::GlobalConfig::load(&env::args().nth(1).map(std::path::PathBuf::from).unwrap_or_else(|| {
+      std::path::PathBuf::from(CARGO_MANIFEST_DIR)
+        .join("config")
+        .join("collector.json")
+    }))?
+    .collector
+    .expect("[collector] requires a valid collector config");
   log::info!("{config:?}");
 
   run(config).await

@@ -3461,6 +3461,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "scs-config"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "humantime-serde",
+ "log",
+ "regex",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "scs-db"
 version = "0.0.1"
 dependencies = [
@@ -3693,18 +3706,14 @@ dependencies = [
  "crossbeam-channel",
  "env_logger",
  "futures",
- "humantime-serde",
  "indicatif 0.16.2",
- "itertools 0.10.3",
  "lazy_static",
  "log",
  "rand 0.8.4",
- "regex",
  "rustyline",
  "scs-chain",
+ "scs-config",
  "scs-db",
- "serde",
- "serde_json",
  "structopt",
  "tokio 1.14.0",
  "twitch",
