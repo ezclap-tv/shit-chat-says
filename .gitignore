@@ -11,3 +11,4 @@ train.json
 train.test.json
 ci-api.json
 config.json
+.vscode
