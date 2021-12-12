@@ -69,10 +69,10 @@ fn execute_command(mut cmd: Command) -> impl Stream<Item = actix_web::Result<web
           match stdout_line {
             Ok(Some(line)) => {
                 println!("{}", line);
-                yield cmd_output!(&schema::CommandOutput {
-                    output: line,
-                    output_kind: schema::OutputKind::Stdout,
-                });
+                yield cmd_output!(&schema::CommandOutput::new(
+                     line,
+                    schema::OutputKind::Stdout,
+                ));
             },
             Ok(None) => {
               stdout_exhausted = true;
@@ -89,10 +89,10 @@ fn execute_command(mut cmd: Command) -> impl Stream<Item = actix_web::Result<web
           match stderr_line {
               Ok(Some(line)) => {
                 eprintln!("{}", line);
-                yield cmd_output!(&schema::CommandOutput {
-                    output: line,
-                    output_kind: schema::OutputKind::Stderr,
-                });
+                yield cmd_output!(&schema::CommandOutput::new(
+                  line,
+                    schema::OutputKind::Stderr,
+                ));
               },
               Ok(None) => {
                 stderr_exhausted = true;
@@ -113,25 +113,25 @@ fn execute_command(mut cmd: Command) -> impl Stream<Item = actix_web::Result<web
       Ok(cmd_res) => match cmd_res {
           Ok(status) => {
             let status_line = format!("command returned successfully: {status:?}");
-            yield cmd_output!(&schema::CommandResult {
-                is_success: true,
-                status_line: status_line.clone(),
-            });
+            yield cmd_output!(&schema::CommandResult::new(
+                true,
+                status_line.clone(),
+            ));
           }
           Err(status) => {
             let status_line = format!("command returned a non-zero exit status: {status:?}");
-            yield cmd_output!(&schema::CommandResult {
-                is_success: false,
-                status_line: status_line.clone(),
-            });
+            yield cmd_output!(&schema::CommandResult::new(
+                 false,
+                 status_line.clone(),
+            ));
             Err(Box::<dyn std::error::Error>::from(status_line))?;
           }
       },
       Err(e) => {
-        yield cmd_output!(&schema::CommandResult {
-            is_success: false,
-            status_line: format!("Command thread panicked: {}", e.to_string()),
-        });
+        yield cmd_output!(&schema::CommandResult::new(
+            false,
+            format!("Command thread panicked: {}", e.to_string()),
+        ));
         Err(e)?;
       }
     };
