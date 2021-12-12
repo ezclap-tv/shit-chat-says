@@ -31,25 +31,3 @@ impl<'a> From<(&'a str, &'a str, i32, &'a str, Option<&'a str>)> for ConnString 
     })
   }
 }
-
-#[cfg(test)]
-mod tests {
-  use super::*;
-
-  #[tokio::test]
-  async fn connect_and_fetch_all() {
-    if std::env::var("RUST_LOG").is_err() {
-      std::env::set_var("RUST_LOG", "INFO");
-    }
-    env_logger::init();
-    let db = connect("postgres://localhost:5432/scs?user=postgres&password=root")
-      .await
-      .unwrap();
-    for entry in logs::Entry::fetch_all(&db, "moscowwbish", Some("moscowwbish"), Some("okay%"), None, Some(10))
-      .await
-      .unwrap()
-    {
-      log::info!("{} {} {}", entry.channel(), entry.chatter(), entry.message());
-    }
-  }
-}
