@@ -1,0 +1,4 @@
+{
+    "compose_file": "../docker/docker-compose.yml",
+    "access_tokens": []
+}
