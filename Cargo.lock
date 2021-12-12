@@ -3467,7 +3467,20 @@ dependencies = [
 ]
 
 [[package]]
-name = "scs-ci-api"
+name = "scs-db"
+version = "0.0.1"
+dependencies = [
+ "actix",
+ "chrono",
+ "env_logger",
+ "futures",
+ "log",
+ "sqlx",
+ "tokio 1.14.0",
+]
+
+[[package]]
+name = "scs-manage-api"
 version = "1.0.0"
 dependencies = [
  "actix",
@@ -3489,20 +3502,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "scs-db"
-version = "0.0.1"
-dependencies = [
- "actix",
- "chrono",
- "env_logger",
- "futures",
- "log",
- "sqlx",
- "tokio 1.14.0",
-]
-
-[[package]]
-name = "scs-explorer-backend"
+name = "scs-uesr-api"
 version = "0.1.0"
 dependencies = [
  "actix",

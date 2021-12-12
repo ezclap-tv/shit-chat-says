@@ -16,9 +16,10 @@ RUN chown rust:rust -R $HOME
 COPY ./Cargo.lock            $HOME/app/Cargo.lock
 COPY ./Cargo.toml            $HOME/app/Cargo.toml
 COPY ./src                   $HOME/app/src
+COPY ./scs-db                $HOME/app/scs-db
 COPY ./scs-chain             $HOME/app/scs-chain
-COPY ./scs-ci-api            $HOME/app/scs-ci-api
-COPY ./scs-explorer-backend  $HOME/app/scs-explorer-backend
+COPY ./scs-user-api          $HOME/app/scs-user-api
+COPY ./scs-manage-api        $HOME/app/scs-manage-api
 
 
 # Make /app the CWD
@@ -36,6 +37,7 @@ RUN --mount=type=cache,target=/home/rust/.cargo/git \
     cp $HOME/app/target/release/gen       $HOME/binaries && \
     cp $HOME/app/target/release/chat      $HOME/binaries && \
     cp $HOME/app/target/release/train     $HOME/binaries && \
+    cp $HOME/app/target/release/ingest    $HOME/binaries && \
     cp $HOME/app/target/release/collector $HOME/binaries
 
 

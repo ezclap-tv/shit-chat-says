@@ -1,4 +1,4 @@
-## scs-ci-api
+## scs-manage-api
 
 This is an internal API service intended to be triggered automatically or semi-automatically.
 The service provides a number of API methods for managing the other SCS services:

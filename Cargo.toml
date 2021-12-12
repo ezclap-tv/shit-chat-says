@@ -7,8 +7,8 @@ edition = "2021"
 
 [workspace]
 members = [
-    "scs-ci-api",
-    "scs-explorer-backend",
+    "scs-manage-api",
+    "scs-user-api",
     "scs-chain",
     "scs-db",
     ".",
