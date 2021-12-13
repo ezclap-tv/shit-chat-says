@@ -1,6 +1,5 @@
 use actix_web::{web, Scope};
 
-pub mod ctx;
 pub mod logs;
 pub mod models;
 

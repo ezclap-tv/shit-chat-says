@@ -1,14 +1,11 @@
 [package]
-name = "scs-uesr-api"
+name = "scs-user-api"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-juniper = "0.15.7"
-juniper_actix = "0.4.0"
-
 actix = "=0.12"
 actix-http = "=3.0.0-beta.13"
 actix-web = "=4.0.0-beta.12"
@@ -21,10 +18,11 @@ futures = "0.3.18"
 async-fs = "1.5.0"
 cached = "0.26.2"
 anyhow = "1.0.51"
-chrono = "0.4.19"
-
+chrono = { version = "0.4.19", features = ["serde"] }
+lazy_static = "1.4.0"
 serde = "1.0.131"
 base64 = "0.13.0"
+regex = "1.5.4"
 
 scs-chain = { path = "../scs-chain" }
 scs-db = { path = "../scs-db" }

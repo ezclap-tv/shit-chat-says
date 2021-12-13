@@ -1,8 +1,44 @@
+use std::fmt::Display;
+
 use sqlx::PgPool;
 
+pub mod channels;
 pub mod logs;
 
 pub type Database = PgPool;
+
+#[derive(Debug)]
+pub struct Error(sqlx::Error);
+
+impl From<sqlx::Error> for Error {
+  fn from(e: sqlx::Error) -> Self {
+    Self(e)
+  }
+}
+
+impl actix_web::ResponseError for Error {
+  fn status_code(&self) -> actix_web::http::StatusCode {
+    actix_web::http::StatusCode::INTERNAL_SERVER_ERROR
+  }
+
+  fn error_response(&self) -> actix_web::HttpResponse {
+    actix_web::HttpResponse::new(self.status_code())
+  }
+}
+
+impl std::error::Error for Error {
+  fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+    self.0.source()
+  }
+}
+
+impl Display for Error {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    write!(f, "Internal server error")
+  }
+}
+
+pub type Result<T> = std::result::Result<T, Error>;
 
 /// * name - database name
 /// * host - IP

@@ -1,10 +1,11 @@
-use super::ctx::Context;
+use crate::{ctx::Context, error::IntoActixResult};
 use actix_web::{get, web, HttpResponse, Responder, Result};
 use serde::Deserialize;
 
 #[get("/models")]
 pub async fn get_models_list(ctx: web::Data<Context>) -> Result<impl Responder> {
-  let channels = ctx.read().await.get_models().await?;
+  use crate::error::IntoActixResult;
+  let channels = ctx.write().await.get_models().await.to_actix()?;
   Ok(web::Json(channels))
 }
 

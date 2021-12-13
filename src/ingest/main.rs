@@ -84,7 +84,7 @@ async fn main() -> Result<()> {
       }
     }
 
-    db::logs::Entry::insert_soa(&db, std::mem::take(&mut entries)).await?;
+    db::logs::insert_soa(&db, std::mem::take(&mut entries)).await?;
   }
   Ok(())
 }
