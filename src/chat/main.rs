@@ -1,10 +1,9 @@
-mod config;
-
 use anyhow::Result;
-use config::Config;
+
 use rand::Rng;
+use scs_config::GlobalConfig;
 use std::{env, ops::Sub, path::PathBuf};
-use twitch::tmi::Message;
+use twitch::tmi::{self, Message};
 
 // Set to 0 to disable sampling.
 const MAX_SAMPLES: usize = 4;
@@ -24,7 +23,7 @@ impl ChannelReplyTracker {
     self.reply_timer = std::time::Instant::now();
   }
 
-  fn should_reply(&self, config: &Config) -> bool {
+  fn should_reply(&self, config: &scs_config::ChatConfig) -> bool {
     self.reply_timer.elapsed() >= config.reply_timeout && self.message_count >= config.reply_after_messages
   }
 }
@@ -46,13 +45,27 @@ async fn stop_signal() -> std::io::Result<()> {
   }
 }
 
-async fn run(config: Config) -> Result<()> {
+fn make_config(config: scs_config::ChatConfig) -> tmi::conn::Config {
+  tmi::conn::Config {
+    membership_data: false,
+    credentials: tmi::conn::Login::Regular {
+      login: config.credentials.login,
+      token: config.credentials.token,
+    },
+  }
+}
+
+async fn run(config: scs_config::ChatConfig) -> Result<()> {
+  if config.channels.is_empty() {
+    anyhow::bail!("config.channels is empty, exiting.");
+  }
+
   log::info!("Loading model");
   let model = chain::load_chain_of_any_supported_order(&config.model_path)?;
 
   'stop: loop {
     log::info!("Connecting to Twitch");
-    let mut conn = twitch::tmi::connect(config.clone().into()).await.unwrap();
+    let mut conn = twitch::tmi::connect(make_config(config.clone())).await.unwrap();
 
     let mut reply_times = std::collections::HashMap::with_capacity(config.channels.len());
     for channel in &config.channels {
@@ -67,8 +80,8 @@ async fn run(config: Config) -> Result<()> {
       );
     }
 
-    let prefix = format!("@{}", config.login.to_ascii_lowercase());
-    let command_prefix = format!("${}", config.login.to_ascii_lowercase());
+    let prefix = format!("@{}", config.credentials.login.to_ascii_lowercase());
+    let command_prefix = format!("${}", config.credentials.login.to_ascii_lowercase());
 
     log::info!("Chat bot is ready");
 
@@ -180,12 +193,14 @@ async fn main() -> Result<()> {
   }
   env_logger::try_init()?;
 
-  let mut config = Config::load(
+  let mut config = GlobalConfig::load(
     &env::args()
       .nth(1)
       .map(PathBuf::from)
       .unwrap_or_else(|| PathBuf::from(CARGO_MANIFEST_DIR).join("config").join("chat.json")),
-  )?;
+  )?
+  .chat
+  .expect("[chat] requires a valid chat config");
 
   if config.model_path.as_os_str().is_empty() {
     config.model_path = std::env::var("SCS_MODEL_PATH")

@@ -1,0 +1,49 @@
+{
+    "collector": {
+        "channels": [
+            "<your_channel_name>",
+            {
+                "name": "<channel_with_different_buffer_size>",
+                "buffer": 2048
+            }
+        ],
+        "output_directory": "logs",
+        "credentials": {
+            "login": "<bot username>",
+            "token": "generate at https://twitchapps.com/tmi/"
+        }
+    },
+    "train": {
+        "channels": {
+            "username": [
+                "additional",
+                "channels",
+                "for",
+                "this",
+                "model"
+            ]
+        },
+        "input_directory": "./logs",
+        "output_directory": "./models",
+        "authored_mode": false,
+        "save_timestamped_checkpoint": true,
+        "model_to_fine_tune": null
+    },
+    "chat": {
+        "credentials": {
+            "login": "<bot username>",
+            "token": "generate at https://twitchapps.com/tmi/"
+        },
+        "channels": [
+            "your_channel_name",
+            "a_different_channel_name"
+        ],
+        "reply_probability": 1.00,
+        "reply_timeout": "60s",
+        "reply_after_messages": 20,
+        "reply_blocklist": [
+            "streamelements"
+        ],
+        "model_path": "/path/to/model.yaml"
+    }
+}

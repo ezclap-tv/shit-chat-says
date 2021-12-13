@@ -1,13 +1,12 @@
-use anyhow::Result;
-use serde::Deserialize;
-use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
-const DEFAULT_OUTPUT_DIRECTORY: &str = concat!(env!("CARGO_MANIFEST_DIR"), "\\logs");
+use serde::Deserialize;
+
+const CARGO_MANIFEST_DIR: &str = env!("CARGO_MANIFEST_DIR");
 const DEFAULT_BUF_SIZE: usize = 1024; // 1 KiB
 
 fn default_output_directory() -> std::path::PathBuf {
-  std::path::PathBuf::from(DEFAULT_OUTPUT_DIRECTORY)
+  std::path::PathBuf::from(CARGO_MANIFEST_DIR).join("logs")
 }
 
 // We only want `Buffered`, but the user should be able to write
@@ -28,13 +27,7 @@ struct TempConfig {
   channels: Vec<TempChannel>,
   #[serde(default = "default_output_directory")]
   output_directory: PathBuf,
-  credentials: Option<TwitchLogin>,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-pub struct TwitchLogin {
-  pub login: String,
-  pub token: String,
+  credentials: Option<crate::TwitchLogin>,
 }
 
 #[derive(Clone, Debug)]
@@ -56,13 +49,13 @@ impl From<TempChannel> for Channel {
 }
 
 #[derive(Clone, Debug)]
-pub struct Config {
+pub struct CollectorConfig {
   pub channels: Vec<Channel>,
   pub output_directory: PathBuf,
-  pub credentials: Option<TwitchLogin>,
+  pub credentials: Option<crate::TwitchLogin>,
 }
 
-impl From<TempConfig> for Config {
+impl From<TempConfig> for CollectorConfig {
   fn from(c: TempConfig) -> Self {
     let TempConfig {
       channels,
@@ -77,10 +70,9 @@ impl From<TempConfig> for Config {
   }
 }
 
-impl Config {
-  pub fn load<P: AsRef<Path>>(path: P) -> Result<Self> {
-    let content = fs::read_to_string(path)?;
-    let config = Config::from(serde_json::from_str::<TempConfig>(&content)?);
+impl CollectorConfig {
+  pub fn validate(self) -> anyhow::Result<Self> {
+    let config = self;
 
     if config.channels.is_empty() {
       log::error!("config.channels is empty, exiting.");
@@ -99,19 +91,12 @@ impl Config {
 
     Ok(config)
   }
-}
 
-impl From<Config> for twitch::tmi::conn::Config {
-  fn from(c: Config) -> Self {
-    twitch::tmi::conn::Config {
-      credentials: match c.credentials {
-        Some(info) => twitch::tmi::conn::Login::Regular {
-          login: info.login,
-          token: info.token,
-        },
-        None => twitch::tmi::conn::Login::Anonymous,
-      },
-      membership_data: false,
-    }
+  pub(crate) fn deserialize<'de, D>(deserializer: D) -> Result<Option<CollectorConfig>, D::Error>
+  where
+    D: serde::Deserializer<'de>,
+  {
+    let json: Option<TempConfig> = serde::de::Deserialize::deserialize(deserializer)?;
+    Ok(json.map(CollectorConfig::from))
   }
 }
