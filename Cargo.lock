@@ -3710,6 +3710,7 @@ dependencies = [
  "lazy_static",
  "log",
  "rand 0.8.4",
+ "regex",
  "rustyline",
  "scs-chain",
  "scs-config",

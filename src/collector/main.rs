@@ -4,7 +4,7 @@ use anyhow::Result;
 use std::collections::HashMap;
 use std::env;
 use std::io::Write;
-use twitch::tmi::Message;
+use twitch::tmi::{self, Message};
 
 // TODO: handle TMI restarts + disconnections with retry
 
@@ -25,14 +25,14 @@ async fn stop_signal() -> std::io::Result<()> {
   }
 }
 
-fn make_config(c: scs_config::CollectorConfig) -> twitch::conn::Config {
-  twitch::conn::Config {
+fn make_config(c: scs_config::CollectorConfig) -> tmi::conn::Config {
+  tmi::conn::Config {
     credentials: match c.credentials {
-      Some(info) => twitch::conn::Login::Regular {
+      Some(info) => tmi::conn::Login::Regular {
         login: info.login,
         token: info.token,
       },
-      None => twitch::conn::Login::Anonymous,
+      None => tmi::conn::Login::Anonymous,
     },
     membership_data: false,
   }
@@ -41,7 +41,7 @@ fn make_config(c: scs_config::CollectorConfig) -> twitch::conn::Config {
 async fn run(config: scs_config::CollectorConfig) -> Result<()> {
   'stop: loop {
     log::info!("Connecting to Twitch");
-    let mut conn = twitch::tmi::connect(config.clone().into()).await.unwrap();
+    let mut conn = tmi::connect(make_config(config.clone())).await.unwrap();
     // one sink per channel
     let mut sinks = HashMap::<String, sink::DailyLogSink>::with_capacity(config.channels.len());
     for channel in config.channels.iter() {
@@ -72,7 +72,7 @@ async fn run(config: scs_config::CollectorConfig) -> Result<()> {
             _ => ()
           },
           // recoverable error, reconnect
-          Err(twitch::tmi::conn::Error::StreamClosed) => break,
+          Err(tmi::conn::Error::StreamClosed) => break,
           // fatal error
           Err(err) => { log::error!("Fatal error: {}", err); break 'stop; }
         }

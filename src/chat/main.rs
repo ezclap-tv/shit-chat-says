@@ -3,7 +3,7 @@ use anyhow::Result;
 use rand::Rng;
 use scs_config::GlobalConfig;
 use std::{env, ops::Sub, path::PathBuf};
-use twitch::tmi::Message;
+use twitch::tmi::{self, Message};
 
 // Set to 0 to disable sampling.
 const MAX_SAMPLES: usize = 4;
@@ -45,10 +45,10 @@ async fn stop_signal() -> std::io::Result<()> {
   }
 }
 
-fn make_config(config: scs_config::ChatConfig) -> twitch::conn::Config {
-  twitch::conn::Config {
+fn make_config(config: scs_config::ChatConfig) -> tmi::conn::Config {
+  tmi::conn::Config {
     membership_data: false,
-    credentials: twitch::conn::Login::Regular {
+    credentials: tmi::conn::Login::Regular {
       login: config.credentials.login,
       token: config.credentials.token,
     },
@@ -65,7 +65,7 @@ async fn run(config: scs_config::ChatConfig) -> Result<()> {
 
   'stop: loop {
     log::info!("Connecting to Twitch");
-    let mut conn = twitch::tmi::connect(config.clone().into()).await.unwrap();
+    let mut conn = twitch::tmi::connect(make_config(config.clone())).await.unwrap();
 
     let mut reply_times = std::collections::HashMap::with_capacity(config.channels.len());
     for channel in &config.channels {

@@ -58,4 +58,5 @@ ahash = "0.7.6"
 rand = "0.8.4"
 futures = "0.3.18"
 structopt = "0.3.25"
+regex = "1.5.4"
 
