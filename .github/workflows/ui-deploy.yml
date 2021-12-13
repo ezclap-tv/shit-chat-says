@@ -25,4 +25,4 @@ jobs:
         with:
           single-commit: true
           branch: gh-pages
-          folder: build
+          folder: scs-ui/build
