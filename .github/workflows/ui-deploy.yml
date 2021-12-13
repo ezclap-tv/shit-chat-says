@@ -1,0 +1,28 @@
+name: Deploy UI
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Deploy UI to gh-pages
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./scs-ui
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-node@v2
+        with:
+          cache: "yarn"
+          cache-dependency-path: scs-ui/yarn.lock
+          node-version: "16.x"
+          registry-url: "https://registry.npmjs.org"
+      - run: yarn
+      - run: yarn build
+      - uses: JamesIves/github-pages-deploy-action@4.1.7
+        with:
+          single-commit: true
+          branch: gh-pages
+          folder: build
