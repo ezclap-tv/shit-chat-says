@@ -3493,6 +3493,7 @@ dependencies = [
  "async-fs",
  "async-stream",
  "cracken",
+ "crossbeam-channel",
  "env_logger",
  "futures",
  "log",

@@ -34,7 +34,7 @@ async fn main() -> anyhow::Result<()> {
   log::info!("Changing the directory to {}", config.project_source_folder.display());
   std::env::set_current_dir(&config.project_source_folder)?;
 
-  let ctx = ctx::Context::new(ctx::State { config, config_path });
+  let ctx = ctx::Context::new(ctx::State::new(config, config_path));
 
   let server = HttpServer::new(move || {
     App::new()
