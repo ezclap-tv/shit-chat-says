@@ -1,15 +1,11 @@
 {
   "login": "your_channel_name",
   "token": "your_twitch_oauth_token",
-  "channels": [
-    "your_channel_name",
-    "a_different_channel_name"
-  ],
-  "reply_probability": 1.00,
+  "channels": ["your_channel_name", "a_different_channel_name"],
+  "reply_probability": 1.0,
   "reply_timeout": "60s",
   "reply_after_messages": 20,
-  "reply_blocklist": [
-    "streamelements"
-  ],
-  "model_path": "/path/to/model.yaml"
+  "reply_blocklist": ["streamelements"],
+  "model_path": "/path/to/model.yaml",
+  "user_cooldown": "60s"
 }

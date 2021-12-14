@@ -18,6 +18,9 @@ pub struct Config {
   pub reply_after_messages: usize,
   #[serde(default = "std::collections::HashSet::new")]
   pub reply_blocklist: std::collections::HashSet<String>,
+  #[serde(with = "humantime_serde")]
+  #[serde(default = "default_user_cooldown")]
+  pub user_cooldown: Duration,
 }
 
 const fn default_reply_probability() -> f64 {
@@ -30,6 +33,10 @@ const fn default_reply_timeout() -> Duration {
 
 const fn default_message_count() -> usize {
   10
+}
+
+const fn default_user_cooldown() -> Duration {
+  Duration::from_secs(60)
 }
 
 impl Config {
