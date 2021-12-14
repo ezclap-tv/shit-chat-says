@@ -3,16 +3,165 @@ use chrono::{DateTime, Utc};
 use serde::Serialize;
 
 #[derive(Debug, sqlx::FromRow, Serialize)]
-pub struct Entry {
+pub struct TwitchUser {
   id: i32,
-  channel: String,
-  chatter: String,
+  username: String,
+  channel_id: Option<i32>,
+}
+
+/// Must not be shared between columns
+pub struct SOAChannel {
+  username_to_id: ahash::AHashMap<String, i32>,
+  users: Vec<i32>,
+}
+
+impl SOAChannel {
+  pub fn new(capacity: usize) -> Self {
+    Self {
+      username_to_id: ahash::AHashMap::with_capacity(capacity),
+      users: Vec::with_capacity(capacity),
+    }
+  }
+
+  #[inline]
+  pub fn get_temporary_id(&mut self, channel: &str) -> i32 {
+    // Mutable borrow problem
+    let mut users = std::mem::take(&mut self.users);
+
+    let id = *self
+      .username_to_id
+      .raw_entry_mut()
+      .from_key(channel)
+      .or_insert_with(|| {
+        assert!(users.len() < i32::max_value() as usize);
+        users.push(0);
+        (channel.to_owned(), users.len() as i32 - 1)
+      })
+      .1;
+
+    self.users = users;
+    id
+  }
+
+  pub async fn resolve_temporary_ids(
+    &mut self,
+    executor: impl sqlx::PgExecutor<'_> + Copy,
+    column: &mut Vec<i32>,
+  ) -> Result<()> {
+    let mut usernames = self.username_to_id.keys().cloned().collect::<Vec<_>>();
+    usernames.sort();
+
+    //let inserted = sqlx::query_as::<_, (i32, String)>(
+    let mut inserted = vec![];
+    let mut count = 0;
+    while inserted.len() != usernames.len() && count < 3 {
+      inserted = sqlx::query_scalar::<_, i32>(
+        r#"
+    WITH input_rows as (
+      SELECT * FROM UNNEST($1) username
+   ), inserted as (
+     INSERT INTO twitch_user (username)
+       SELECT * FROM input_rows
+     ON CONFLICT (username) DO NOTHING
+       RETURNING id
+    )
+     SELECT id, tw.username FROM inserted JOIN twitch_user tw USING (id)
+     UNION ALL
+     SELECT
+       c.id, username
+     FROM
+       input_rows
+       JOIN twitch_user c USING (username)
+     ORDER BY username;   
+    "#,
+      )
+      .bind(&usernames)
+      .fetch_all(executor)
+      .await?;
+
+      if count > 1 {
+        log::error!(
+          "inserted.len() != usernames.len() ({} != {}), have to refetch (?)",
+          inserted.len(),
+          usernames.len()
+        );
+      }
+
+      count += 1;
+    }
+
+    if inserted.len() != usernames.len() {
+      assert_eq!(
+        inserted.len(),
+        usernames.len(),
+        "Failed to insert/get all usernames after {count} attempts",
+      );
+      // anyhow::bail!(format!(
+      //   "Failed to insert/get all usernames after {} attempts (inserted != usernames: {} != {})",
+      //   count,
+      //   inserted.len(),
+      //   usernames.len(),
+      // ));
+    }
+
+    for (order, username) in usernames.into_iter().enumerate() {
+      let temporary_id = *self.username_to_id.get(&username).unwrap();
+      *self.users.get_mut(temporary_id as usize).unwrap() = inserted[order];
+    }
+
+    for value in column {
+      *value = self.users[*value as usize];
+    }
+
+    self.username_to_id.clear();
+    self.users.clear();
+    Ok(())
+  }
+}
+
+pub struct SOAEntry {
+  channel: Vec<i32>,
+  pub chatter: Vec<i32>,
+  sent_at: Vec<DateTime<Utc>>,
+  message: Vec<String>,
+}
+
+impl SOAEntry {
+  pub fn new(capacity: usize) -> Self {
+    Self {
+      channel: Vec::with_capacity(capacity),
+      chatter: Vec::with_capacity(capacity),
+      sent_at: Vec::with_capacity(capacity),
+      message: Vec::with_capacity(capacity),
+    }
+  }
+
+  pub fn add(&mut self, channel: i32, chatter: i32, sent_at: DateTime<Utc>, message: String) {
+    self.channel.push(channel);
+    self.chatter.push(chatter);
+    self.sent_at.push(sent_at);
+    self.message.push(message);
+  }
+
+  pub fn clear(&mut self) {
+    self.channel.clear();
+    self.chatter.clear();
+    self.sent_at.clear();
+    self.message.clear();
+  }
+}
+
+#[derive(Debug, sqlx::FromRow, Serialize)]
+pub struct Entry {
+  id: i64,
+  channel: i32,
+  chatter: i32,
   sent_at: DateTime<Utc>,
   message: String,
 }
 
 impl Entry {
-  pub fn new(channel: String, chatter: String, sent_at: DateTime<Utc>, message: String) -> Entry {
+  pub fn new(channel: i32, chatter: i32, sent_at: DateTime<Utc>, message: String) -> Entry {
     Entry {
       id: -1,
       channel,
@@ -28,21 +177,25 @@ impl Entry {
   }
 
   #[inline]
-  pub fn id(&self) -> i32 {
+  pub fn id(&self) -> i64 {
     self.id
   }
+
   #[inline]
-  pub fn channel(&self) -> &str {
-    &self.channel
+  pub fn channel(&self) -> i32 {
+    self.channel
   }
+
   #[inline]
-  pub fn chatter(&self) -> &str {
-    &self.chatter
+  pub fn chatter(&self) -> i32 {
+    self.chatter
   }
+
   #[inline]
   pub fn sent_at(&self) -> &DateTime<Utc> {
     &self.sent_at
   }
+
   #[inline]
   pub fn message(&self) -> &str {
     &self.message
@@ -53,7 +206,7 @@ impl Entry {
 pub async fn insert_one(executor: impl sqlx::PgExecutor<'_> + Copy, entry: &Entry) -> Result<()> {
   let _ = sqlx::query(
     "
-    INSERT INTO logs (channel, chatter, sent_at, message)
+    INSERT INTO twitch_logs (channel, chatter, sent_at, message)
     VALUES ($1, $2, $3, $4)
     ",
   )
@@ -69,33 +222,21 @@ pub async fn insert_one(executor: impl sqlx::PgExecutor<'_> + Copy, entry: &Entr
 /// Insert log entries in batch mode (efficient for large inserts)
 ///
 /// `entries` will be cleared
-pub async fn insert_soa(executor: impl sqlx::PgExecutor<'_>, entries: Vec<Entry>) -> Result<()> {
-  let (mut channel, mut chatter, mut sent_at, mut message) = (
-    Vec::<String>::with_capacity(entries.len()),
-    Vec::<String>::with_capacity(entries.len()),
-    Vec::<DateTime<Utc>>::with_capacity(entries.len()),
-    Vec::<String>::with_capacity(entries.len()),
-  );
-
-  for entry in entries.into_iter() {
-    channel.push(entry.channel);
-    chatter.push(entry.chatter);
-    sent_at.push(entry.sent_at);
-    message.push(entry.message);
-  }
-
+pub async fn insert_soa(executor: impl sqlx::PgExecutor<'_>, entry: &mut SOAEntry) -> Result<()> {
   sqlx::query(
     "
-    INSERT INTO logs (channel, chatter, sent_at, message)
+    INSERT INTO twitch_logs (channel, chatter, sent_at, message)
     SELECT * FROM UNNEST($1, $2, $3, $4)
     ",
   )
-  .bind(&channel)
-  .bind(&chatter)
-  .bind(&sent_at)
-  .bind(&message)
+  .bind(&entry.channel)
+  .bind(&entry.chatter)
+  .bind(&entry.sent_at)
+  .bind(&entry.message)
   .execute(executor)
   .await?;
+
+  entry.clear();
 
   Ok(())
 }
@@ -123,9 +264,12 @@ pub async fn fetch_all<S: Into<String>>(
   }
   let mut n = 1i32;
 
-  let mut query = format!("SELECT * FROM logs WHERE channel = ${}\n", inc!(n));
+  let mut query = format!(
+    "SELECT * FROM twitch_logs WHERE channel = ({})\n",
+    crate::get_channel_id_sql!(inc!(n))
+  );
   if chatter.is_some() {
-    query += &format!("AND chatter = ${}\n", inc!(n));
+    query += &format!("AND chatter = ({})\n", crate::get_channel_id_sql!(inc!(n)));
   }
   if pattern.is_some() {
     query += &format!("AND message LIKE ${}\n", inc!(n));

@@ -3334,6 +3334,7 @@ version = "0.0.1"
 dependencies = [
  "actix",
  "actix-web 4.0.0-beta.12",
+ "ahash 0.7.6",
  "chrono",
  "env_logger",
  "futures",

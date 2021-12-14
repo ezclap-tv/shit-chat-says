@@ -4,7 +4,7 @@ use serde::Deserialize;
 
 #[get("/logs")]
 pub async fn get_channel_list(db: web::Data<Database>) -> Result<impl Responder> {
-  let channels = db::channels::get_all(db.get_ref()).await?;
+  let channels = db::channels::get_logged_channels(db.get_ref()).await?;
   Ok(web::Json(channels))
 }
 

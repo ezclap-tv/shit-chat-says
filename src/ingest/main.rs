@@ -26,14 +26,18 @@ fn parse_known_tz_offset(tz: &str) -> Result<&'static str> {
 }
 
 fn walk_logs(dir: impl AsRef<Path>) -> impl Iterator<Item = (String, String, DirEntry)> {
-  WalkDir::new(dir).into_iter().filter_map(|e| e.ok()).filter_map(|e| {
-    e.path()
-      .file_stem()
-      .and_then(|v| v.to_str())
-      .and_then(|v| v.split_once('-'))
-      .map(|(channel, date)| (channel.to_owned(), date.to_owned()))
-      .map(|(channel, date)| (channel, date, e))
-  })
+  WalkDir::new(dir)
+    .into_iter()
+    .filter_map(|e| e.ok())
+    .filter(|e| e.path().extension() == Some(std::ffi::OsStr::new("log")))
+    .filter_map(|e| {
+      e.path()
+        .file_stem()
+        .and_then(|v| v.to_str())
+        .and_then(|v| v.split_once('-'))
+        .map(|(channel, date)| (channel.to_owned(), date.to_owned()))
+        .map(|(channel, date)| (channel, date, e))
+    })
 }
 
 #[tokio::main]
@@ -52,10 +56,16 @@ async fn main() -> Result<()> {
   let tz_re = Regex::new(r"# Start logging at \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} (\w+)")?;
   let msg_re = Regex::new(r"\[(\d{2}:\d{2}:\d{2})\]  (\w+): (.*)")?;
 
-  let mut entries = Vec::<db::logs::Entry>::new();
+  // NOTE: The channel name queries are going to slow this done somewhat, but it shouldn't be too bad.
+  // If this turns out to be a problem, we can run this on a thread pool with each log line spawned as a task.
+  let mut cache = ahash::AHashMap::with_capacity(10); // set this to 1 million if the cache is used as the main username resolution strategy
+  let mut soa_channel = db::logs::SOAChannel::new(50_000); // 50k users
+  let mut soa_entry = db::logs::SOAEntry::new(2_000_000); // 56 bytes each * 2,000,000 = 100MB
   for (channel, date, entry) in walk_logs(opts.logs) {
-    entries.clear();
-    log::info!("{} {} {}", channel, date, entry.path().display());
+    let channel_id = db::channels::get_or_create_channel(&db, &channel, true, &mut cache).await?;
+
+    let instant = std::time::Instant::now();
+    log::info!("{} {} {} (collect started)", channel, date, entry.path().display());
     let mut file_tz_offset = "+0000";
     let content = fs::read_to_string(entry.path())?;
     for line in content.split('\n') {
@@ -65,26 +75,36 @@ async fn main() -> Result<()> {
         .captures(line)
         .and_then(|v| Some((v.get(1)?.as_str(), v.get(2)?.as_str(), v.get(3)?.as_str())))
       {
+        // let chatter_id = db::channels::get_or_create_channel(&db, chatter, &mut cache).await?;
+        let chatter_id = soa_channel.get_temporary_id(chatter);
+
         // format options: https://docs.rs/chrono/latest/chrono/format/strftime/index.html
-        let log_entry = db::logs::Entry::new(
-          channel.clone(),
-          chatter.to_string(),
-          chrono::DateTime::parse_from_str(&format!("{date} {time} {file_tz_offset}"), "%F %T %z")?
-            .with_timezone(&chrono::Utc),
-          message.to_string(),
-        );
-        /* log::info!(
-          "#{} [{}] {}: {}",
-          log_entry.channel(),
-          log_entry.sent_at().to_rfc3339(),
-          log_entry.chatter(),
-          log_entry.message()
-        ); */
-        entries.push(log_entry);
+        let sent_at = chrono::DateTime::parse_from_str(&format!("{date} {time} {file_tz_offset}"), "%F %T %z")?
+          .with_timezone(&chrono::Utc);
+        let message = message.to_string();
+
+        soa_entry.add(channel_id, chatter_id, sent_at, message);
       }
     }
 
-    db::logs::insert_soa(&db, std::mem::take(&mut entries)).await?;
+    log::info!(
+      "{} {} {} (collect finished in {:.4}s)",
+      channel,
+      date,
+      entry.path().display(),
+      instant.elapsed().as_secs_f64()
+    );
+
+    soa_channel.resolve_temporary_ids(&db, &mut soa_entry.chatter).await?;
+    db::logs::insert_soa(&db, &mut soa_entry).await?;
+
+    log::info!(
+      "{} {} {} (file inserted in {:.4}s)\n",
+      channel,
+      date,
+      entry.path().display(),
+      instant.elapsed().as_secs_f64()
+    );
   }
   Ok(())
 }

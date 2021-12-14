@@ -1,6 +1,10 @@
+#![feature(hash_raw_entry)]
+
 use std::fmt::Display;
 
 use sqlx::PgPool;
+
+pub use sqlx;
 
 pub mod channels;
 pub mod logs;
