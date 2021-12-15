@@ -59,7 +59,6 @@ async fn main() -> Result<()> {
   // NOTE: The channel name queries are going to slow this done somewhat, but it shouldn't be too bad.
   // If this turns out to be a problem, we can run this on a thread pool with each log line spawned as a task.
   let mut cache = ahash::AHashMap::with_capacity(10); // set this to 1 million if the cache is used as the main username resolution strategy
-  let mut soa_channel = db::logs::SOAChannel::new(50_000); // 50k users
   let mut soa_entry = db::logs::SOAEntry::new(2_000_000); // 56 bytes each * 2,000,000 = 100MB
   for (channel, date, entry) in walk_logs(opts.logs) {
     let channel_id = db::channels::get_or_create_channel(&db, &channel, true, &mut cache).await?;
@@ -75,15 +74,13 @@ async fn main() -> Result<()> {
         .captures(line)
         .and_then(|v| Some((v.get(1)?.as_str(), v.get(2)?.as_str(), v.get(3)?.as_str())))
       {
-        // let chatter_id = db::channels::get_or_create_channel(&db, chatter, &mut cache).await?;
-        let chatter_id = soa_channel.get_temporary_id(chatter);
-
+        let chatter = chatter.to_owned();
         // format options: https://docs.rs/chrono/latest/chrono/format/strftime/index.html
         let sent_at = chrono::DateTime::parse_from_str(&format!("{date} {time} {file_tz_offset}"), "%F %T %z")?
           .with_timezone(&chrono::Utc);
         let message = message.to_string();
 
-        soa_entry.add(channel_id, chatter_id, sent_at, message);
+        soa_entry.add(channel_id, chatter, sent_at, message);
       }
     }
 
@@ -95,7 +92,6 @@ async fn main() -> Result<()> {
       instant.elapsed().as_secs_f64()
     );
 
-    soa_channel.resolve_temporary_ids(&db, &mut soa_entry.chatter).await?;
     db::logs::insert_soa(&db, &mut soa_entry).await?;
 
     log::info!(
