@@ -11,7 +11,7 @@ mod v1;
 #[actix_web::main]
 async fn main() -> anyhow::Result<()> {
   if std::env::var("RUST_LOG").is_err() {
-    env::set_var("RUST_LOG", "info");
+    env::set_var("RUST_LOG", "info,actix_web=debug"); // actix_web=debug enables error logging
   }
   env_logger::init();
 
