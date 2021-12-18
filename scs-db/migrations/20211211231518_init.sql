@@ -1,3 +1,5 @@
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
 create table twitch_user(
   id SERIAL PRIMARY KEY,
   username VARCHAR(50) UNIQUE NOT NULL,
@@ -36,7 +38,12 @@ CREATE TABLE twitch_logs_metadata(
   metadata TEXT
 );
 
--- hash index
-CREATE INDEX idx_user_username ON twitch_user USING HASH (username);
-CREATE INDEX idx_logs_channel ON twitch_logs (channel);
-CREATE INDEX idx_logs_user ON twitch_logs (chatter);
+-- hash index for faster joins
+CREATE INDEX idx_twitch_user_username ON twitch_user USING HASH (username);
+-- btree indexes so we can efficiently partition by channel and chatter
+CREATE INDEX idx_twitch_logs_channel ON twitch_logs (channel);
+CREATE INDEX idx_twitch_logs_user ON twitch_logs (chatter);
+-- a multi-column index to enable efficnet seek paging (see https://use-the-index-luke.com/no-offset)
+CREATE INDEX idx_twitch_logs_channel_sent_at_id ON twitch_logs (channel, sent_at, id);
+-- A GIN trigram index that significantly speeds up fuzzy text search with operators such as LIKE, ILIKE, and %
+CREATE INDEX idx_twitch_logs_message_trigram ON twitch_logs USING GIN(message gin_trgm_ops);
