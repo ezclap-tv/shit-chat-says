@@ -1,82 +1,51 @@
-## Instructions
+# scs-user-api
 
-1. Run the binary
-2. Open the browser and navigate to http://localhost:8080/playground (you can also use [Apollo Studio Explorer](https://studio.apollographql.com/sandbox/explorer) if you want)
-3. Set the server URL to http://localhost:8080/graphql
-4. Explore the schema by clicking on the "Schema" and "Docs" buttons on the right. Press Ctrl+P to get suggestions while editing the queries and inputs.
+User-facing API for SCS
 
-## Sample Queries
+## API Schema
 
-See the sample queries and inputs in the next two code blocks.
+All endpoints (except `/health`) require an auth token (Bearer), and they all return JSON.
 
-```graphql
-# Info and metadata queries
-query GetInfo($name: String!) {
-  modelInfo(name: $name) {
-    dateCreated
-    dateModified
-    isCompressed
-    name
-    size
-  }
-  channels {
-    name
-    totalSize
-  }
-  channel(name: $name) {
-    name
-    logFiles {
-      name
-      size
-    }
-    totalSize
-  }
-  models {
-    size
-    name
-    dateModified
-    dateCreated
-  }
-}
-
-# This mutation (aka POST) loads a model into the memory
-mutation LoadModel($name: String!) {
-  loadModel(name: $name) {
-    name
-    size
-    order
-    metadata
-  }
-}
-
-# This query uses a previously loaded model
-query UseModel($name: String!, $input: ModelInput!) {
-  modelMeta(name: $name) {
-    metadata
-    name
-    order
-    size
-  }
-  generateText(input: $input) {
-    outputs {
-      text
-      numSamples
-    }
-    maxSamples
-  }
-}
-```
-
-Inputs:
-
-```json
-{
-  "name": "ambadev.chain",
-  "input": {
-    "name": "ambadev.chain",
-    "seedPhrase": "whats up",
-    "maxSamples": 4,
-    "nOutputs": 5
-  }
-}
-```
+<table>
+  <tbody>
+    <tr>
+      <th>Endpoint</th>
+      <th>Method</th>
+      <th>URL path params</th>
+      <th>URL query params</th>
+      <th>Description</th>
+    </tr>
+    <tr>
+      <td>`/health`</td>
+      <td>`GET`</td>
+      <td>None</td>
+      <td>None</td>
+      <td>Returns 200 OK, used to check if the API is running</td>
+    </tr>
+    <tr>
+      <td>`/v1/logs/channels`</td>
+      <td>`GET`</td>
+      <td>None</td>
+      <td>None</td>
+      <td>Returns a list of logged channels</td>
+    </tr>
+    <tr>
+      <td>`/v1/logs/{channel}`</td>
+      <td>`GET`</td>
+      <td>
+        <ul>
+          <li>`channel` - channel name (from the `/logs/channels` endpoint)</li>
+        </ul>
+      </td>
+      <td>
+        <ul>
+          <li>`chatter` - filters for messages sent by this user</li>
+          <li>`pattern` - filters for messages with a content that matches this [`LIKE`](https://www.postgresql.org/docs/14/functions-matching.html#FUNCTIONS-LIKE) pattern</li>
+          <li>`cursor` - page token returned by the previous </li>
+          <li>`page_size` - between 128 and 1024</li>
+        </ul>
+      </td>
+      <td>Returns a paginated list of messages, and a cursor to retrieve the next page.</td>
+    </tr>
+  </tbody>
+</table>
