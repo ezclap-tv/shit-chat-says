@@ -23,7 +23,7 @@ function send(
   setTimeout(() => controller.abort(), timeout);
 
   const url = new URL(uri);
-  if (params) url.search = new URLSearchParams(params).toString();
+  if (params) url.search = "?" + new URLSearchParams(params).toString();
 
   const init: RequestInit = {
     method: method,
@@ -41,9 +41,42 @@ namespace api {
     const BASE_URL = __SCS_USER_API_URL__;
 
     export async function health() {
-      await send("GET", BASE_URL + "/health");
+      const response = await send("GET", BASE_URL + "/health");
+      return response.status === 200;
+    }
+
+    export namespace logs {
+      export async function channels(): Promise<string[]> {
+        const response = await send("GET", BASE_URL + "/v1/logs/channels");
+        return await response.json();
+      }
+
+      type Entry = {
+        id: number;
+        channel: string;
+        chatter: string;
+        sent_at: string;
+        message: string;
+      };
+      type ChannelsResponse = {
+        messages: Entry[];
+        cursor?: string;
+      };
+      export async function find(
+        channel: string,
+        chatter?: string,
+        pattern?: string,
+        cursor?: string,
+        page_size?: number
+      ): Promise<ChannelsResponse> {
+        const response = await send("GET", BASE_URL + `/v1/logs/${channel}`, { chatter, pattern, cursor, page_size });
+        return await response.json();
+      }
     }
   }
 }
+
+// @ts-ignore
+globalThis._api = api;
 
 export default api;
