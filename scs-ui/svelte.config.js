@@ -20,8 +20,8 @@ const config = {
       plugins: [
         replace({
           replacements: [
-            { from: "__SCS_USER_API_URL__", to: process.env.SCS_USER_API_URL },
-            { from: "__SCS_MANAGE_API_URL__", to: process.env.SCS_MANAGE_API_URL },
+            { from: "__SCS_USER_API_URL__", to: JSON.stringify(process.env.SCS_USER_API_URL) },
+            { from: "__SCS_MANAGE_API_URL__", to: JSON.stringify(process.env.SCS_MANAGE_API_URL) },
           ],
         }),
       ],

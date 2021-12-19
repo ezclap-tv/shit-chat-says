@@ -50,7 +50,7 @@ async fn main() -> Result<()> {
   let opts = Options::from_args_safe()?;
 
   log::info!("Connecting to {}", opts.uri);
-  let db = db::connect(("scs", "127.0.0.1", 5432, "postgres", Some("root"))).await?;
+  let db = db::connect(opts.uri).await?;
 
   log::info!("Reading logs from {}", opts.logs.display());
   let tz_re = Regex::new(r"# Start logging at \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} (\w+)")?;
