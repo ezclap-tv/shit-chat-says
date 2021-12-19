@@ -1,12 +1,16 @@
 use actix_cors::Cors;
-use actix_web::http::header;
-use actix_web::{middleware, web::Data, App, HttpServer};
+use actix_web::{self, get, http::header, middleware, web::Data, App, HttpResponse, HttpServer};
 use std::env;
 
 mod ctx;
 mod error;
 mod schema;
 mod v1;
+
+#[get("/health")]
+async fn health_check() -> HttpResponse {
+  HttpResponse::Ok().finish()
+}
 
 #[actix_web::main]
 async fn main() -> anyhow::Result<()> {
@@ -37,6 +41,7 @@ async fn main() -> anyhow::Result<()> {
       )
       .wrap(middleware::Compress::default())
       .wrap(middleware::Logger::default())
+      .service(health_check)
       .service(v1::routes())
   });
   server.bind("127.0.0.1:8080").unwrap().run().await?;
