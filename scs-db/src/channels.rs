@@ -48,7 +48,10 @@ pub async fn get_or_create_channel(
   inserted AS (
   INSERT INTO twitch_user (username, is_logged_as_channel)
     SELECT * FROM input_rows
-    ON CONFLICT (username) DO NOTHING
+    ON CONFLICT (username) 
+      DO UPDATE 
+        SET is_logged_as_channel = EXCLUDED.is_logged_as_channel 
+        WHERE twitch_user.username = EXCLUDED.username
     RETURNING id, is_logged_as_channel
   )
   SELECT id, is_logged_as_channel FROM inserted
