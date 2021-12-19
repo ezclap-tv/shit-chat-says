@@ -31,12 +31,12 @@
     estree-walker "^2.0.1"
     picomatch "^2.2.2"
 
-"@sveltejs/adapter-static@^1.0.0-next.22":
+"@sveltejs/adapter-static@next":
   version "1.0.0-next.22"
   resolved "https://registry.yarnpkg.com/@sveltejs/adapter-static/-/adapter-static-1.0.0-next.22.tgz#d615cf419c902aba8383c18fd839c7679437bf06"
   integrity sha512-Dc1V9Z72dA7caVwNxxzl9Jhcq4uN9N1udA2GKNTLMu3aWX3Cq+v6C2CddY9Aazr+F9h6J0vi9AienuH+ySRXzQ==
 
-"@sveltejs/kit@^1.0.0-next.202":
+"@sveltejs/kit@next":
   version "1.0.0-next.202"
   resolved "https://registry.yarnpkg.com/@sveltejs/kit/-/kit-1.0.0-next.202.tgz#7438bc1b20c1acdd611588c3c1c1470959b2a251"
   integrity sha512-rXmJ0FplkWvD1CaeCfejRYhOJYrlmeUm5Fkw7gIKDdWPQev5rqOhd9B9ZvRpq35oMqCAwaOfK+e5S6k+83feEQ==
@@ -734,6 +734,11 @@ typescript@*, typescript@^4.4.3:
   version "4.5.4"
   resolved "https://registry.yarnpkg.com/typescript/-/typescript-4.5.4.tgz#a17d3a0263bf5c8723b9c52f43c5084edf13c2e8"
   integrity sha512-VgYs2A2QIRuGphtzFV7aQJduJ2gyfTljngLzjpfW9FoYZF6xuw1W0vW9ghCKLfcWrCFxK81CSGRAvS1pn4fIUg==
+
+vite-plugin-replace@^0.1.1:
+  version "0.1.1"
+  resolved "https://registry.yarnpkg.com/vite-plugin-replace/-/vite-plugin-replace-0.1.1.tgz#d9fdd04ac98d4d2552ef9ff3d6c2768e825c8562"
+  integrity sha512-v+okl3JNt2pf1jDYijw+WPVt6h9FWa/atTi+qnSFBqmKThLTDhlesx0r3bh+oFPmxRJmis5tNx9HtN6lGFoqWg==
 
 vite@^2.7.2:
   version "2.7.3"

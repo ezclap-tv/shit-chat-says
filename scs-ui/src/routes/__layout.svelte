@@ -1,8 +1,8 @@
 <script lang="ts">
-  import Nav from "$lib/nav.svelte";
+  import Navigation from "$lib/Navigation.svelte";
 </script>
 
-<Nav />
+<Navigation />
 <main>
   <slot />
 </main>
