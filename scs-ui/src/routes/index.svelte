@@ -1,5 +1,5 @@
 <script lang="ts" context="module">
-  import "$lib/api";
+  import "$lib/data";
 </script>
 
 <h1>Welcome to SvelteKit</h1>

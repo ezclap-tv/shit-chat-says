@@ -10,6 +10,7 @@ type Params = Record<string, any>;
  * - In case of a GET request, `body` is ignored
  * - The request `body` is stringified using `JSON.stringify`
  * - Default timeout is 10s
+ * - keys with values equal to `null` or `undefined` are filtered from the object (deeply)
  */
 function send(
   method: Method,
@@ -51,25 +52,30 @@ namespace api {
         return await response.json();
       }
 
-      type Entry = {
+      export type Entry = {
         id: number;
         channel: string;
         chatter: string;
         sent_at: string;
         message: string;
       };
-      type ChannelsResponse = {
+      export type LogsResponse = {
         messages: Entry[];
         cursor?: string;
       };
       export async function find(
         channel: string,
-        chatter?: string,
-        pattern?: string,
-        cursor?: string,
-        page_size?: number
-      ): Promise<ChannelsResponse> {
-        const response = await send("GET", BASE_URL + `/v1/logs/${channel}`, { chatter, pattern, cursor, page_size });
+        chatter?: string | null,
+        pattern?: string | null,
+        cursor?: string | null,
+        page_size?: number | null
+      ): Promise<LogsResponse> {
+        const req = {} as Params;
+        if (cursor) req.cursor = cursor;
+        if (chatter) req.chatter = chatter;
+        if (pattern) req.pattern = pattern;
+        if (page_size) req.page_size = page_size;
+        const response = await send("GET", BASE_URL + `/v1/logs/${channel}`, req);
         return await response.json();
       }
     }
