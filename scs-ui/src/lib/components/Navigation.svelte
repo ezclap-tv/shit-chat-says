@@ -10,7 +10,6 @@
   import { page } from "$app/stores";
 
   const routes: Route[] = [
-    { name: "Login", href: "/login" },
     { name: "Logs", href: "/logs" },
     { name: "Models", href: "/models" },
     { name: "Admin", href: "/admin" },
@@ -45,7 +44,7 @@
     padding: 16px 0 0 16px;
     /* show/hide animation */
     transition: left 0.15s ease-in-out;
-    left: -216px;
+    left: -200px;
     &.open {
       left: 0;
     }

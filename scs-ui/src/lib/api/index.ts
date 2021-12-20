@@ -38,6 +38,9 @@ function send(
 }
 
 namespace api {
+  export namespace twitch {
+    // TODO: get user profile images
+  }
   export namespace user {
     const BASE_URL = __SCS_USER_API_URL__;
 

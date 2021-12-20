@@ -1,18 +1,57 @@
+<script context="module">
+  export const ssr = false;
+</script>
+
 <script lang="ts">
+  import Loading from "$lib/components/Loading.svelte";
   import { channels } from "$lib/api/stores";
 
   channels.update();
 </script>
 
-<span>Logs</span>
 {#await $channels}
-  <span>(spinner)</span>
+  <div><Loading /></div>
 {:then channels}
-  <ul>
+  <div class="grid">
     {#each channels as channel}
-      <li>{channel} <a href={`/logs/${channel}`}>show</a></li>
+      <a href={`/logs/${channel}`}>
+        <span>{channel}</span>
+      </a>
     {/each}
-  </ul>
+  </div>
 {:catch e}
-  <span>Failed to load channels: {e}</span>
+  <div>
+    Failed to load channels:<br />
+    <pre>{e}</pre>
+  </div>
 {/await}
+
+<style lang="scss">
+  .grid {
+    display: flex;
+    flex-wrap: wrap;
+
+    > a {
+      /* 4 per row, 4px * 2 = margin on both sides */
+      width: calc(100% / 4 - 4px * 2);
+      height: 48px;
+      margin: 4px;
+
+      display: flex;
+      > * {
+        margin: auto;
+      }
+
+      text-decoration: none;
+      border-radius: 8px;
+      border: 1px solid;
+      color: var(--secondary);
+      &:visited {
+        color: var(--secondary);
+      }
+      &:hover {
+        color: var(--primary);
+      }
+    }
+  }
+</style>

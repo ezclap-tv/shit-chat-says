@@ -1,5 +1,5 @@
-<script lang="ts" context="module">
-  import "$lib/data";
+<script context="module">
+  export const ssr = false;
 </script>
 
 <h1>Welcome to SvelteKit</h1>

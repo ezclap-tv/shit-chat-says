@@ -63,3 +63,6 @@ function apiStore<Value, Params extends any[]>(
 import api from "./index";
 
 export const channels = apiStore(api.user.logs.channels);
+
+// @ts-ignore
+globalThis._stores = { channels };

@@ -3394,10 +3394,13 @@ dependencies = [
  "futures",
  "lazy_static",
  "log",
+ "rand 0.8.4",
  "regex",
+ "reqwest",
  "scs-chain",
  "scs-db",
  "serde",
+ "structopt",
  "tokio 1.14.0",
 ]
 

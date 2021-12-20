@@ -1,3 +1,7 @@
+<script context="module">
+  export const ssr = false;
+</script>
+
 <script lang="ts">
   import api from "$lib/api";
   import { stagger } from "$lib/utils";

@@ -9,6 +9,13 @@ impl From<anyhow::Error> for Error {
     Error { inner }
   }
 }
+impl From<reqwest::Error> for Error {
+  fn from(inner: reqwest::Error) -> Error {
+    Error {
+      inner: anyhow::Error::from(inner),
+    }
+  }
+}
 
 impl std::fmt::Debug for Error {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -26,8 +33,11 @@ pub trait IntoActixResult<T> {
   fn to_actix(self) -> std::result::Result<T, Error>;
 }
 
-impl<T> IntoActixResult<T> for anyhow::Result<T> {
+impl<T, E: Into<anyhow::Error>> IntoActixResult<T> for std::result::Result<T, E> {
   fn to_actix(self) -> std::result::Result<T, Error> {
-    self.map_err(|inner| Error { inner })
+    match self {
+      Ok(v) => Ok(v),
+      Err(e) => Err(e.into().into()),
+    }
   }
 }
