@@ -1,13 +1,14 @@
 #![feature(hash_raw_entry)]
 
-use std::fmt::Display;
-
 use sqlx::PgPool;
+use std::fmt::Display;
 
 pub use sqlx;
 
 pub mod channels;
 pub mod logs;
+pub mod tokens;
+pub mod user;
 
 pub type Database = PgPool;
 

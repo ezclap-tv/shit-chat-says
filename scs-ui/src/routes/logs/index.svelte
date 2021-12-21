@@ -4,13 +4,14 @@
 
 <script lang="ts">
   import Loading from "$lib/components/Loading.svelte";
+  import Overlay from "$lib/components/Overlay.svelte";
   import { channels } from "$lib/api/stores";
 
   channels.update();
 </script>
 
 {#await $channels}
-  <div><Loading /></div>
+  <Overlay anchor="top" transparent><Loading /></Overlay>
 {:then channels}
   <div class="grid">
     {#each channels as channel}
@@ -20,10 +21,9 @@
     {/each}
   </div>
 {:catch e}
-  <div>
-    Failed to load channels:<br />
-    <pre>{e}</pre>
-  </div>
+  <Overlay anchor="top" transparent>
+    <span>Failed to load channels: {e}</span>
+  </Overlay>
 {/await}
 
 <style lang="scss">

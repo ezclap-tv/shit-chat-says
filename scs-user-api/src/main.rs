@@ -6,6 +6,7 @@ use structopt::StructOpt;
 mod auth;
 mod ctx;
 mod error;
+mod ex;
 mod schema;
 mod v1;
 

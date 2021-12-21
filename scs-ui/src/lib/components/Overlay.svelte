@@ -1,8 +1,9 @@
 <script lang="ts">
   export let anchor: "top" | "bottom" | "left" | "right" | "center" = "center";
+  export let transparent: boolean = false;
 </script>
 
-<div class={anchor}>
+<div class={anchor} class:transparent>
   <slot />
 </div>
 
@@ -15,6 +16,9 @@
     width: 100%;
     height: 100%;
     background-color: rgba(0, 0, 0, 0.3);
+    &.transparent {
+      background-color: transparent;
+    }
 
     display: flex;
 

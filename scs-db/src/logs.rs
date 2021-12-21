@@ -1,13 +1,8 @@
 use super::Result;
+use crate::user::TwitchUser;
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 
-#[derive(Debug, sqlx::FromRow, Serialize)]
-pub struct TwitchUser {
-  id: i32,
-  username: String,
-  channel_id: Option<i32>,
-}
 pub struct SOAEntry {
   channel: Vec<i32>,
   chatter: Vec<String>,
@@ -45,11 +40,11 @@ pub type RawEntry = Entry<i32>;
 
 #[derive(Debug, sqlx::FromRow, Serialize)]
 pub struct Entry<U> {
-  pub id: i64,
-  pub channel: U,
-  pub chatter: U,
-  pub sent_at: DateTime<Utc>,
-  pub message: String,
+  id: i64,
+  channel: U,
+  chatter: U,
+  sent_at: DateTime<Utc>,
+  message: String,
 }
 
 impl<U> Entry<U> {
@@ -116,16 +111,7 @@ pub async fn insert_one(executor: impl sqlx::PgExecutor<'_> + Copy, entry: &Entr
 /// `entries` will be cleared
 pub async fn insert_soa(executor: impl sqlx::PgExecutor<'_> + Copy, entry: &mut SOAEntry) -> Result<()> {
   // Bulk insert the chatters
-  sqlx::query(
-    "
-    INSERT INTO twitch_user (username)
-	    SELECT * FROM UNNEST($1)
-    ON CONFLICT (username) DO NOTHING;
-    ",
-  )
-  .bind(&entry.chatter)
-  .execute(executor)
-  .await?;
+  TwitchUser::create_bulk(executor, &entry.chatter).await?;
 
   // Then complete the insert into logs by joining chatters with twitch_user
   sqlx::query(

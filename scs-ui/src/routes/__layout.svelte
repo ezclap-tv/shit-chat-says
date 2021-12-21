@@ -38,6 +38,7 @@
   :global(main) {
     max-width: 60%;
     width: 100%;
+    height: 100%;
     margin: auto;
 
     padding: 32px 16px;

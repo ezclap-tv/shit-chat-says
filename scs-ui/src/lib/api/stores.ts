@@ -1,4 +1,5 @@
 import type { Readable } from "svelte/store";
+import api, { type Response } from "./index";
 
 type ApiStoreCallback<Value> = (value: Promise<Value>) => void;
 type ApiStoreUpdate<Params extends any[]> = (...params: Params) => Promise<void>;
@@ -32,7 +33,7 @@ type ApiStore<Value, Params extends any[]> = Readable<Promise<Value>> & { update
  * chain `then`/`catch`/`finally` callbacks without interfering with eachother.
  */
 function apiStore<Value, Params extends any[]>(
-  request: (...params: Params) => Promise<Value>
+  request: (...params: Params) => Promise<Response<Value>>
 ): ApiStore<Value, Params> {
   // https://svelte.dev/docs#component-format-script-4-prefix-stores-with-$-to-access-their-values-store-contract
   // Svelte store contract:
@@ -49,18 +50,16 @@ function apiStore<Value, Params extends any[]>(
       return () => subscriptions.delete(callback);
     },
     async update(...params: Params) {
-      try {
-        const result = await request(...params);
-        promise = () => Promise.resolve(result);
-      } catch (error: any) {
-        promise = () => Promise.reject(error);
+      const result = await request(...params);
+      if (result.type === "success") {
+        promise = () => Promise.resolve(result.data);
+      } else {
+        promise = () => Promise.reject(result.message);
       }
       subscriptions.forEach((callback) => callback(promise()));
     },
   };
 }
-
-import api from "./index";
 
 export const channels = apiStore(api.user.logs.channels);
 

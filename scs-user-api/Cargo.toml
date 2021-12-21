@@ -21,11 +21,13 @@ anyhow = "1.0.51"
 chrono = { version = "0.4.19", features = ["serde"] }
 lazy_static = "1.4.0"
 serde = "1.0.131"
+serde_json = "1.0.73"
 base64 = "0.13.0"
 regex = "1.5.4"
 reqwest = { version = "0.11.7", features = ["json"] }
 structopt = "0.3.25"
 rand = "0.8.4"
+getset = "0.1.2"
 
 scs-chain = { path = "../scs-chain" }
 scs-db = { path = "../scs-db" }

@@ -81,7 +81,7 @@ fn parse_cursor(cursor: Option<String>) -> Result<Option<(i64, chrono::DateTime<
 
 fn generate_cursor<T>(messages: &[db::logs::Entry<T>]) -> Option<String> {
   messages.last().map(|msg| {
-    let cursor = format!("{},{}", msg.id, msg.sent_at.to_rfc3339());
+    let cursor = format!("{},{}", msg.id(), msg.sent_at().to_rfc3339());
     base64::encode_config(&cursor, base64::URL_SAFE)
   })
 }

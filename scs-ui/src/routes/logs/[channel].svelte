@@ -21,15 +21,21 @@
   let isAtEnd = false;
   let scroll: InfiniteScroll | undefined;
 
+  let error: string | null = null;
   let loading: "full" | "page" | "none" = "full";
 
   // full reload - when any of the inputs change
   const loadFull = stagger(async () => {
-    const data = await api.user.logs.find(channel, chatter, pattern, null, page_size);
-    logs = data.messages; // full fetch = discard all messages
-    cursor = data.cursor;
-    isAtEnd = !data.cursor; // no cursor in response = no more messages
-    scroll?.reset();
+    const response = await api.user.logs.find(channel, chatter, pattern, null, page_size);
+    if (response.type === "success") {
+      const data = response.data;
+      logs = data.messages; // full fetch = discard all messages
+      cursor = data.cursor;
+      isAtEnd = !data.cursor; // no cursor in response = no more messages
+      scroll?.reset();
+    } else {
+      error = response.message ?? "Something went wrong";
+    }
     loading = "none";
   }, 1000);
 
@@ -46,11 +52,16 @@
       return;
     }
     loading = "page";
-    const data = await api.user.logs.find(channel, chatter, pattern, cursor, page_size);
-    logs = [...logs, ...data.messages]; // page fetch = insert messages
-    cursor = data.cursor;
-    isAtEnd = !data.cursor; // no cursor in response = no more messages
-    scroll?.reset();
+    const response = await api.user.logs.find(channel, chatter, pattern, cursor, page_size);
+    if (response.type === "success") {
+      const data = response.data;
+      logs = [...logs, ...data.messages]; // page fetch = insert messages
+      cursor = data.cursor;
+      isAtEnd = !data.cursor; // no cursor in response = no more messages
+      scroll?.reset();
+    } else {
+      error = response.message ?? "Something went wrong";
+    }
     loading = "none";
   };
 
@@ -73,6 +84,9 @@
 <div class="logs">
   {#if loading === "full"}
     <Overlay anchor="top"><Loading /></Overlay>
+  {/if}
+  {#if error}
+    <Overlay anchor="top"><span>{error}</span></Overlay>
   {/if}
   {#each logs as line (line.id)}
     <div>{line.chatter}: {line.message}</div>
