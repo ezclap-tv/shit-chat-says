@@ -1,3 +1,6 @@
+import { apiStore } from "$lib/utils";
+import { user as _userStore } from "$lib/auth";
+
 type Method = "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
 type Headers = Record<string, string>;
 type Body = Record<string, any>;
@@ -61,12 +64,14 @@ async function send<T>(
   }
 }
 
-namespace api {
+export namespace api {
   export namespace twitch {
     // TODO: get user profile images
   }
   export namespace user {
     const BASE_URL = __SCS_USER_API_URL__;
+
+    const access = () => ({ Authorization: `Bearer ${_userStore.get()}` });
 
     export async function health() {
       return await send("GET", BASE_URL + "/health");
@@ -82,7 +87,7 @@ namespace api {
     export namespace logs {
       export type ChannelsResponse = Response<string[]>;
       export async function channels(): Promise<ChannelsResponse> {
-        return await send("GET", BASE_URL + "/v1/logs/channels");
+        return await send("GET", BASE_URL + "/v1/logs/channels", null, access());
       }
 
       export type Entry = {
@@ -108,7 +113,7 @@ namespace api {
         if (chatter) req.chatter = chatter;
         if (pattern) req.pattern = pattern;
         if (page_size) req.page_size = page_size;
-        return await send("GET", BASE_URL + `/v1/logs/${channel}`, req);
+        return await send("GET", BASE_URL + `/v1/logs/${channel}`, req, access());
       }
     }
   }
@@ -117,4 +122,9 @@ namespace api {
 // @ts-ignore
 globalThis._api = api;
 
-export default api;
+export namespace stores {
+  export const channels = apiStore(api.user.logs.channels);
+}
+
+// @ts-ignore
+globalThis._stores = stores;

@@ -6,7 +6,7 @@
   import { get } from "svelte/store";
   import { twitch, user } from "$lib/auth";
   import { nonce } from "$lib/utils";
-  import api from "$lib/api";
+  import { api } from "$lib/api";
   import { goto } from "$app/navigation";
   import Loading from "$lib/components/Loading.svelte";
   import Overlay from "$lib/components/Overlay.svelte";
@@ -97,6 +97,9 @@
       const res = await api.user.auth.token(code, redirect_uri);
       if (res.type === "success") {
         user.set(res.data.token);
+        // TODO:
+        // save the page before user was forcefully redirected to `/login`,
+        // then return them there at this point
         goto("/", { replaceState: true });
       } else {
         error = res.message ?? "Something went wrong...";

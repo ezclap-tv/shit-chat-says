@@ -3,7 +3,7 @@
 </script>
 
 <script lang="ts">
-  import api from "$lib/api";
+  import { api } from "$lib/api";
   import { stagger } from "$lib/utils";
   import { page } from "$app/stores";
   import Loading from "$lib/components/Loading.svelte";

@@ -1,6 +1,8 @@
 use crate::error::FailWith;
-use actix_web::{post, web, HttpResponse, Responder, Result};
+use actix_http::{http::header, StatusCode};
+use actix_web::{post, web, FromRequest, HttpResponse, Responder, Result};
 use rand::{distributions::Alphanumeric, thread_rng, Rng};
+use std::{future::Future, pin::Pin};
 
 #[derive(Debug, serde::Deserialize)]
 pub struct TokenQuery {
@@ -90,6 +92,49 @@ impl AccessToken {
         .collect(),
     }
   }
+
+  pub fn encode(&self) -> String {
+    base64::encode_config(format!("{}-{}", self.user_id, self.token), base64::URL_SAFE)
+  }
+
+  pub fn decode(value: &str) -> Option<Self> {
+    let bytes = base64::decode_config(value, base64::URL_SAFE).ok()?;
+    let string = String::from_utf8(bytes).ok()?;
+    let (user_id, token) = string
+      .split_once('-')
+      .and_then(|(id, token)| Some((id.parse::<i32>().ok()?, token.to_string())))?;
+    Some(AccessToken { user_id, token })
+  }
+}
+
+fn bearer_auth_value(v: &header::HeaderValue) -> Option<&str> {
+  v.to_str().ok().and_then(|v| {
+    // is this necessary?
+    v.strip_prefix("Bearer ").or_else(|| v.strip_prefix("bearer "))
+  })
+}
+
+impl FromRequest for AccessToken {
+  type Error = crate::error::Error;
+  type Future = Pin<Box<dyn Future<Output = Result<Self, Self::Error>>>>;
+
+  fn from_request(req: &actix_web::HttpRequest, _: &mut actix_http::Payload) -> Self::Future {
+    let auth = req
+      .headers()
+      .get(header::AUTHORIZATION)
+      .and_then(bearer_auth_value)
+      .and_then(AccessToken::decode);
+
+    let db = req.app_data::<web::Data<db::Database>>().unwrap().clone();
+
+    Box::pin(async move {
+      let auth = auth.with(StatusCode::UNAUTHORIZED)?;
+      db::tokens::Token::verify(db.get_ref(), &auth.token)
+        .await
+        .with(StatusCode::UNAUTHORIZED)?;
+      Ok(auth)
+    })
+  }
 }
 
 impl serde::Serialize for AccessToken {
@@ -97,10 +142,7 @@ impl serde::Serialize for AccessToken {
   where
     S: serde::Serializer,
   {
-    <String as serde::Serialize>::serialize(
-      &base64::encode_config(format!("{}-{}", self.user_id, self.token), base64::URL_SAFE),
-      serializer,
-    )
+    <String as serde::Serialize>::serialize(&self.encode(), serializer)
   }
 }
 
@@ -110,13 +152,7 @@ impl<'de> serde::Deserialize<'de> for AccessToken {
     D: serde::Deserializer<'de>,
   {
     use serde::de::Error;
-    let encoded = <String as serde::Deserialize<'de>>::deserialize(deserializer)?;
-    let decoded = base64::decode_config(encoded, base64::URL_SAFE).map_err(Error::custom)?;
-    let string = String::from_utf8(decoded).map_err(Error::custom)?;
-    let (user_id, token) = string
-      .split_once('-')
-      .ok_or_else(|| Error::custom("invalid access token"))
-      .and_then(|(id, token)| Ok((id.parse::<i32>().map_err(Error::custom)?, token.to_string())))?;
-    Ok(AccessToken { user_id, token })
+    let string = <String as serde::Deserialize<'de>>::deserialize(deserializer)?;
+    AccessToken::decode(&string).ok_or_else(|| Error::custom("invalid access token"))
   }
 }

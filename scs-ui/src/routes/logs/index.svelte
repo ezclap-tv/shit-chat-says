@@ -5,8 +5,8 @@
 <script lang="ts">
   import Loading from "$lib/components/Loading.svelte";
   import Overlay from "$lib/components/Overlay.svelte";
-  import { channels } from "$lib/api/stores";
-
+  import { stores } from "$lib/api";
+  const channels = stores.channels;
   channels.update();
 </script>
 

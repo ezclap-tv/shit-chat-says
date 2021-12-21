@@ -98,3 +98,18 @@ impl<T, E: std::fmt::Debug> FailWith<T> for std::result::Result<T, E> {
     })
   }
 }
+
+impl<T> FailWith<T> for std::option::Option<T> {
+  fn with(self, info: impl IntoMsgAndCode) -> std::result::Result<T, Error> {
+    match self {
+      Some(v) => Ok(v),
+      None => Err(info.into()),
+    }
+  }
+  fn internal(self) -> std::result::Result<T, Error> {
+    self.ok_or_else(|| Error {
+      message: "Internal Server Error".into(),
+      code: StatusCode::INTERNAL_SERVER_ERROR,
+    })
+  }
+}
