@@ -40,26 +40,26 @@ pub async fn get_or_create_channel(
   // This seems to be 30% faster than doing SELECT + INSERT
   let id = sqlx::query_scalar::<_, i32>(
     r#"
-  WITH
-    input_rows (username, is_logged_as_channel) AS (VALUES ($1, $2)),
-    inserted AS (
-      INSERT INTO twitch_user (username, is_logged_as_channel)
-        SELECT * FROM input_rows
-        ON CONFLICT (username) 
-          DO UPDATE 
-            SET is_logged_as_channel = EXCLUDED.is_logged_as_channel 
-            WHERE twitch_user.username = EXCLUDED.username 
-            AND twitch_user.is_logged_as_channel = FALSE
-        RETURNING id, is_logged_as_channel
-    )
-  SELECT id, is_logged_as_channel FROM inserted
-  UNION ALL
-  SELECT
-    c.id, c.is_logged_as_channel
-  FROM
-    input_rows
-    JOIN twitch_user c USING (username);
-  "#,
+    WITH
+      input_rows (username, is_logged_as_channel) AS (VALUES ($1, $2)),
+      inserted AS (
+        INSERT INTO twitch_user (username, is_logged_as_channel)
+          SELECT * FROM input_rows
+          ON CONFLICT (username) 
+            DO UPDATE 
+              SET is_logged_as_channel = EXCLUDED.is_logged_as_channel 
+              WHERE twitch_user.username = EXCLUDED.username 
+              AND twitch_user.is_logged_as_channel = FALSE
+          RETURNING id, is_logged_as_channel
+      )
+    SELECT id, is_logged_as_channel FROM inserted
+    UNION ALL
+    SELECT
+      c.id, c.is_logged_as_channel
+    FROM
+      input_rows
+      JOIN twitch_user c USING (username);
+    "#,
   )
   .bind(username)
   .bind(&is_logged_as_channel)

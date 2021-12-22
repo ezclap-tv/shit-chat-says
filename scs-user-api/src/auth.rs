@@ -40,7 +40,7 @@ pub async fn create_token(
     .internal()?;
   // ensure that user associated with token exists in our DB
   log::info!("[get/create user in db] {} {}", user_info.login, user_info.id);
-  let user = db::user::TwitchUser::get_or_create(db.get_ref(), &user_info.login, Some(user_info.id.parse().unwrap()))
+  let user = db::users::get_or_create(db.get_ref(), &user_info.login, Some(user_info.id.parse().unwrap()))
     .await
     .internal()?;
   // generate a `user-api` access token for them
@@ -49,7 +49,7 @@ pub async fn create_token(
   // persist it
   log::info!(
     "[persisted token] {:?}",
-    db::tokens::Token::create(
+    db::tokens::create(
       db.get_ref(),
       user.id(),
       token.token(),
@@ -129,7 +129,7 @@ impl FromRequest for AccessToken {
 
     Box::pin(async move {
       let auth = auth.with(StatusCode::UNAUTHORIZED)?;
-      db::tokens::Token::verify(db.get_ref(), &auth.token)
+      db::tokens::verify(db.get_ref(), &auth.token)
         .await
         .with(StatusCode::UNAUTHORIZED)?;
       Ok(auth)

@@ -8,7 +8,7 @@ pub mod allowlist;
 pub mod channels;
 pub mod logs;
 pub mod tokens;
-pub mod user;
+pub mod users;
 
 pub type Database = PgPool;
 

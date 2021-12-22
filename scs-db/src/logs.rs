@@ -1,5 +1,5 @@
 use super::Result;
-use crate::user::TwitchUser;
+use crate::users;
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 
@@ -111,7 +111,7 @@ pub async fn insert_one(executor: impl sqlx::PgExecutor<'_> + Copy, entry: &Entr
 /// `entries` will be cleared
 pub async fn insert_soa(executor: impl sqlx::PgExecutor<'_> + Copy, entry: &mut SOAEntry) -> Result<()> {
   // Bulk insert the chatters
-  TwitchUser::create_bulk(executor, &entry.chatter).await?;
+  users::create_bulk(executor, &entry.chatter).await?;
 
   // Then complete the insert into logs by joining chatters with twitch_user
   sqlx::query(
