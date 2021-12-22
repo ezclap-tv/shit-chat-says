@@ -28,8 +28,8 @@ impl Model {
   pub fn simple(&self) -> SimpleModelInfo {
     SimpleModelInfo {
       name: self.name.clone(),
-      date_created: self.date_created.clone(),
-      date_modified: self.date_modified.clone(),
+      date_created: self.date_created,
+      date_modified: self.date_modified,
       size: self.size,
     }
   }

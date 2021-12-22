@@ -22,14 +22,14 @@ pub async fn get_or_create(
       "
       WITH
       selected AS (
-         SELECT * FROM twitch_user
-         WHERE username = $1
+        SELECT * FROM twitch_user
+        WHERE username = $1
       ),
       inserted AS (
-         INSERT INTO twitch_user (username)
+        INSERT INTO twitch_user (username)
           VALUES ($1)
-         ON CONFLICT (username) DO NOTHING
-         RETURNING *
+        ON CONFLICT (username) DO NOTHING
+        RETURNING *
       )
       SELECT * FROM selected
       UNION ALL

@@ -30,8 +30,8 @@ pub async fn create(
     sqlx::query_as::<_, Token>(
       "
       INSERT INTO tokens (user_id, scs_user_api_token, twitch_access_token, twitch_refresh_token)
-      VALUES ($1, $2, $3, $4)
-      RETURNING *
+        VALUES ($1, $2, $3, $4)
+        RETURNING *
       ",
     )
     .bind(user_id)
@@ -46,7 +46,8 @@ pub async fn create(
 pub async fn delete(executor: impl sqlx::PgExecutor<'_> + Copy, scs_user_api_token: &str) -> Result<()> {
   sqlx::query(
     "
-    DELETE FROM tokens WHERE scs_user_api_token = $1
+    DELETE FROM tokens
+      WHERE scs_user_api_token = $1
     ",
   )
   .bind(scs_user_api_token)
@@ -56,14 +57,14 @@ pub async fn delete(executor: impl sqlx::PgExecutor<'_> + Copy, scs_user_api_tok
 }
 
 pub async fn verify(executor: impl sqlx::PgExecutor<'_> + Copy, scs_user_api_token: &str) -> Result<bool> {
-  Ok(
-    sqlx::query_scalar::<_, bool>(
-      "
-      SELECT TRUE FROM tokens WHERE scs_user_api_token = $1
+  sqlx::query_scalar::<_, bool>(
+    "
+      SELECT TRUE FROM tokens
+        WHERE scs_user_api_token = $1
       ",
-    )
-    .bind(scs_user_api_token)
-    .fetch_one(executor)
-    .await?,
   )
+  .bind(scs_user_api_token)
+  .fetch_optional(executor)
+  .await
+  .map(|v| v.unwrap_or(false))
 }

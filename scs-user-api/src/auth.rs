@@ -108,10 +108,9 @@ impl AccessToken {
 }
 
 fn bearer_auth_value(v: &header::HeaderValue) -> Option<&str> {
-  v.to_str().ok().and_then(|v| {
-    // is this necessary?
-    v.strip_prefix("Bearer ").or_else(|| v.strip_prefix("bearer "))
-  })
+  v.to_str()
+    .ok()
+    .and_then(|v| v.strip_prefix("Bearer ").or_else(|| v.strip_prefix("bearer ")))
 }
 
 impl FromRequest for AccessToken {
@@ -126,13 +125,15 @@ impl FromRequest for AccessToken {
       .and_then(AccessToken::decode);
 
     let db = req.app_data::<web::Data<db::Database>>().unwrap().clone();
-
     Box::pin(async move {
       let auth = auth.with(StatusCode::UNAUTHORIZED)?;
-      db::tokens::verify(db.get_ref(), &auth.token)
-        .await
-        .with(StatusCode::UNAUTHORIZED)?;
-      Ok(auth)
+      if db::allowlist::has(db.get_ref(), auth.user_id()).await.internal()?
+        && db::tokens::verify(db.get_ref(), &auth.token).await.internal()?
+      {
+        Ok(auth)
+      } else {
+        Err(StatusCode::UNAUTHORIZED.into())
+      }
     })
   }
 }

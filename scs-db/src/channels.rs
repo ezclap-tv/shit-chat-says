@@ -3,9 +3,14 @@ use super::Result;
 pub async fn get_logged_channels(executor: impl sqlx::PgExecutor<'_>) -> Result<Vec<String>> {
   // TODO: be move careful with this one if we start logging more channels
   Ok(
-    sqlx::query_scalar::<_, String>("SELECT username FROM twitch_user WHERE is_logged_as_channel = true")
-      .fetch_all(executor)
-      .await?,
+    sqlx::query_scalar::<_, String>(
+      "
+      SELECT username FROM twitch_user
+        WHERE is_logged_as_channel = true
+      ",
+    )
+    .fetch_all(executor)
+    .await?,
   )
 }
 

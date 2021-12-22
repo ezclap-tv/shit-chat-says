@@ -1,20 +1,23 @@
 use super::Result;
 
-pub async fn get_all(executor: impl sqlx::PgExecutor<'_>) -> Result<Vec<i32>> {
-  sqlx::query_scalar::<_, i32>(
+pub async fn has(executor: impl sqlx::PgExecutor<'_>, id: i32) -> Result<bool> {
+  sqlx::query_scalar::<_, bool>(
     "
-    SELECT * FROM allowlist
+    SELECT TRUE FROM allowlist
+      WHERE id = $1
     ",
   )
-  .fetch_all(executor)
+  .bind(id)
+  .fetch_optional(executor)
   .await
+  .map(|v| v.unwrap_or(false))
 }
 
-pub async fn add(executor: impl sqlx::PgExecutor<'_>, ids: &[i32]) -> Result<()> {
+pub async fn insert(executor: impl sqlx::PgExecutor<'_>, ids: &[i32]) -> Result<()> {
   sqlx::query(
     "
     INSERT INTO allowlist
-    SELECT * FROM UNNEST($1)
+      SELECT * FROM UNNEST($1)
     ",
   )
   .bind(ids)
@@ -27,7 +30,7 @@ pub async fn remove(executor: impl sqlx::PgExecutor<'_>, ids: &[i32]) -> Result<
   sqlx::query(
     "
     DELETE FROM allowlist
-    WHERE id IN (SELECT * FROM UNNEST($1))
+      WHERE id IN (SELECT * FROM UNNEST($1))
     ",
   )
   .bind(ids)
