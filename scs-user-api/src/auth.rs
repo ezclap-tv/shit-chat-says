@@ -127,8 +127,9 @@ impl FromRequest for AccessToken {
     let db = req.app_data::<web::Data<db::Database>>().unwrap().clone();
     Box::pin(async move {
       let auth = auth.with(StatusCode::UNAUTHORIZED)?;
-      if db::allowlist::has(db.get_ref(), auth.user_id()).await.internal()?
-        && db::tokens::verify(db.get_ref(), &auth.token).await.internal()?
+      if db::tokens::verify(db.get_ref(), auth.user_id(), &auth.token)
+        .await
+        .internal()?
       {
         Ok(auth)
       } else {

@@ -56,13 +56,26 @@ pub async fn delete(executor: impl sqlx::PgExecutor<'_> + Copy, scs_user_api_tok
   Ok(())
 }
 
-pub async fn verify(executor: impl sqlx::PgExecutor<'_> + Copy, scs_user_api_token: &str) -> Result<bool> {
+pub async fn verify(
+  executor: impl sqlx::PgExecutor<'_> + Copy,
+  user_id: i32,
+  scs_user_api_token: &str,
+) -> Result<bool> {
   sqlx::query_scalar::<_, bool>(
     "
-      SELECT TRUE FROM tokens
-        WHERE scs_user_api_token = $1
+      SELECT TRUE
+      WHERE (
+        SELECT TRUE FROM allowlist
+          WHERE id = $1
+      )
+      AND (
+        SELECT TRUE FROM tokens
+          WHERE user_id = $1
+          AND scs_user_api_token = $2
+      )
       ",
   )
+  .bind(user_id)
   .bind(scs_user_api_token)
   .fetch_optional(executor)
   .await
