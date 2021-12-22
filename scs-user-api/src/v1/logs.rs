@@ -1,4 +1,5 @@
 use crate::auth;
+use crate::error::FailWith;
 use actix_web::{get, web, Responder, Result};
 use db::{self, Database};
 use serde::{Deserialize, Serialize};
@@ -8,7 +9,7 @@ pub const DEFAULT_PAGE_SIZE: u32 = 128;
 
 #[get("/logs/channels")]
 pub async fn get_channel_list(_: auth::AccessToken, db: web::Data<Database>) -> Result<impl Responder> {
-  let channels = db::channels::get_logged_channels(db.get_ref()).await?;
+  let channels = db::channels::get_logged_channels(db.get_ref()).await.internal()?;
   Ok(web::Json(channels))
 }
 
@@ -50,7 +51,8 @@ pub async fn get_channel_logs(
     page_size.unwrap_or(DEFAULT_PAGE_SIZE).min(MAX_PAGE_SIZE),
     cursor,
   )
-  .await?;
+  .await
+  .internal()?;
   let cursor = generate_cursor(&messages);
   Ok(web::Json(ChannelsResponse { messages, cursor }))
 }
