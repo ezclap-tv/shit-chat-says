@@ -8,14 +8,15 @@ pub struct TwitchUser {
   username: String,
   channel_id: Option<i32>,
 }
-pub struct SOAEntry {
+#[derive(Debug)]
+pub struct SOAEntry<U> {
   channel: Vec<i32>,
-  chatter: Vec<String>,
+  chatter: Vec<U>,
   sent_at: Vec<DateTime<Utc>>,
   message: Vec<String>,
 }
 
-impl SOAEntry {
+impl<U> SOAEntry<U> {
   pub fn new(capacity: usize) -> Self {
     Self {
       channel: Vec::with_capacity(capacity),
@@ -25,7 +26,7 @@ impl SOAEntry {
     }
   }
 
-  pub fn add(&mut self, channel: i32, chatter: String, sent_at: DateTime<Utc>, message: String) {
+  pub fn add(&mut self, channel: i32, chatter: U, sent_at: DateTime<Utc>, message: String) {
     self.channel.push(channel);
     self.chatter.push(chatter);
     self.sent_at.push(sent_at);
@@ -38,9 +39,14 @@ impl SOAEntry {
     self.sent_at.clear();
     self.message.clear();
   }
+
+  #[inline]
+  pub fn size(&self) -> usize {
+    self.channel.len()
+  }
 }
 
-pub type ResolvedEntry = Entry<String>;
+pub type UnresolvedEntry = Entry<String>;
 pub type RawEntry = Entry<i32>;
 
 #[derive(Debug, sqlx::FromRow, Serialize)]
@@ -50,6 +56,21 @@ pub struct Entry<U> {
   pub chatter: U,
   pub sent_at: DateTime<Utc>,
   pub message: String,
+}
+
+impl<U> Clone for Entry<U>
+where
+  U: Clone,
+{
+  fn clone(&self) -> Self {
+    Self {
+      id: self.id,
+      channel: self.channel.clone(),
+      chatter: self.chatter.clone(),
+      sent_at: self.sent_at,
+      message: self.message.clone(),
+    }
+  }
 }
 
 impl<U> Entry<U> {
@@ -114,7 +135,7 @@ pub async fn insert_one(executor: impl sqlx::PgExecutor<'_> + Copy, entry: &Entr
 /// Insert log entries in batch mode (efficient for large inserts)
 ///
 /// `entries` will be cleared
-pub async fn insert_soa(executor: impl sqlx::PgExecutor<'_> + Copy, entry: &mut SOAEntry) -> Result<()> {
+pub async fn insert_soa(executor: impl sqlx::PgExecutor<'_> + Copy, entry: &mut SOAEntry<String>) -> Result<()> {
   // Bulk insert the chatters
   sqlx::query(
     "
@@ -141,6 +162,25 @@ pub async fn insert_soa(executor: impl sqlx::PgExecutor<'_> + Copy, entry: &mut 
       FROM raw_logs rl
       JOIN twitch_user tw ON tw.username = rl.chatter
     ) as joined;
+    ",
+  )
+  .bind(&entry.channel)
+  .bind(&entry.chatter)
+  .bind(&entry.sent_at)
+  .bind(&entry.message)
+  .execute(executor)
+  .await?;
+
+  entry.clear();
+
+  Ok(())
+}
+
+/// Insert log entries where the channels and chatters have already been resolved in batch mode
+pub async fn insert_soa_resolved(executor: impl sqlx::PgExecutor<'_> + Copy, entry: &mut SOAEntry<i32>) -> Result<()> {
+  sqlx::query(
+    "
+      INSERT INTO twitch_logs (channel, chatter, sent_at, message) SELECT * FROM UNNEST($1, $2, $3, $4);
     ",
   )
   .bind(&entry.channel)

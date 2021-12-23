@@ -4,12 +4,14 @@ use std::fmt::Display;
 
 use sqlx::PgPool;
 
+pub use lru;
 pub use sqlx;
 
 pub mod channels;
 pub mod logs;
 
 pub type Database = PgPool;
+pub type UserCache = lru::LruCache<String, i32, ahash::RandomState>;
 
 #[derive(Debug)]
 pub struct Error(sqlx::Error);

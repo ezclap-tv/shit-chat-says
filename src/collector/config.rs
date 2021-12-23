@@ -4,7 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 const DEFAULT_OUTPUT_DIRECTORY: &str = concat!(env!("CARGO_MANIFEST_DIR"), "\\logs");
-const DEFAULT_BUF_SIZE: usize = 1024; // 1 KiB
+const DEFAULT_BUF_SIZE: usize = 25; // 25 messages, should be adjusted for faster chats.
 
 fn default_output_directory() -> std::path::PathBuf {
   std::path::PathBuf::from(DEFAULT_OUTPUT_DIRECTORY)
@@ -20,14 +20,24 @@ fn default_output_directory() -> std::path::PathBuf {
 #[serde(untagged)]
 pub enum TempChannel {
   NameOnly(String),
-  Buffered { name: String, buffer: usize },
+  Buffered {
+    name: String,
+    message_buffer_size: usize,
+  },
+  BufferedWithCache {
+    name: String,
+    message_buffer_size: usize,
+    username_cache_size: usize,
+  },
 }
 
 #[derive(Deserialize)]
 struct TempConfig {
   channels: Vec<TempChannel>,
+  #[serde(deserialize_with = "humantime_serde::deserialize")]
+  buffer_lifetime: std::time::Duration,
   #[serde(default = "default_output_directory")]
-  output_directory: PathBuf,
+  filesystem_buffer_directory: PathBuf,
   credentials: Option<TwitchLogin>,
 }
 
@@ -40,7 +50,8 @@ pub struct TwitchLogin {
 #[derive(Clone, Debug)]
 pub struct Channel {
   pub name: String,
-  pub buffer: usize,
+  pub message_buffer_size: usize,
+  pub username_cache_size: usize,
 }
 
 impl From<TempChannel> for Channel {
@@ -48,9 +59,26 @@ impl From<TempChannel> for Channel {
     match c {
       TempChannel::NameOnly(name) => Self {
         name,
-        buffer: DEFAULT_BUF_SIZE,
+        message_buffer_size: DEFAULT_BUF_SIZE,
+        username_cache_size: crate::sink::USERNAME_CACHE_SIZE,
       },
-      TempChannel::Buffered { name, buffer } => Self { name, buffer },
+      TempChannel::Buffered {
+        name,
+        message_buffer_size,
+      } => Self {
+        name,
+        message_buffer_size,
+        username_cache_size: crate::sink::USERNAME_CACHE_SIZE,
+      },
+      TempChannel::BufferedWithCache {
+        name,
+        message_buffer_size,
+        username_cache_size,
+      } => Self {
+        name,
+        message_buffer_size,
+        username_cache_size,
+      },
     }
   }
 }
@@ -58,7 +86,8 @@ impl From<TempChannel> for Channel {
 #[derive(Clone, Debug)]
 pub struct Config {
   pub channels: Vec<Channel>,
-  pub output_directory: PathBuf,
+  pub filesystem_buffer_directory: PathBuf,
+  pub buffer_lifetime: std::time::Duration,
   pub credentials: Option<TwitchLogin>,
 }
 
@@ -66,12 +95,14 @@ impl From<TempConfig> for Config {
   fn from(c: TempConfig) -> Self {
     let TempConfig {
       channels,
-      output_directory,
+      filesystem_buffer_directory,
+      buffer_lifetime,
       credentials,
     } = c;
     Self {
       channels: channels.into_iter().map(Channel::from).collect(),
-      output_directory,
+      buffer_lifetime,
+      filesystem_buffer_directory,
       credentials,
     }
   }
@@ -87,14 +118,17 @@ impl Config {
       anyhow::bail!("No channels specified");
     }
 
-    if !config.output_directory.exists() {
-      log::warn!("config.output_directory does not exist, it will be created.");
-      std::fs::create_dir_all(&config.output_directory)?;
+    if !config.filesystem_buffer_directory.exists() {
+      log::warn!("config.filesystem_buffer_directory does not exist, it will be created.");
+      std::fs::create_dir_all(&config.filesystem_buffer_directory)?;
     }
 
-    if !config.output_directory.is_dir() {
-      log::error!("config.output_directory is not a directory.");
-      anyhow::bail!(format!("{} is not a directory", config.output_directory.display()));
+    if !config.filesystem_buffer_directory.is_dir() {
+      log::error!("config.filesystem_buffer_directory is not a directory.");
+      anyhow::bail!(format!(
+        "{} is not a directory",
+        config.filesystem_buffer_directory.display()
+      ));
     }
 
     Ok(config)

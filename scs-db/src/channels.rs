@@ -29,7 +29,7 @@ pub async fn get_or_create_channel(
   executor: impl sqlx::PgExecutor<'_> + Copy,
   username: &str,
   is_logged_as_channel: bool,
-  cache: &mut ahash::AHashMap<String, i32>,
+  cache: &mut crate::UserCache,
 ) -> Result<i32> {
   // Fast path: username is in the local cache
   if let Some(id) = cache.get(username).copied() {
@@ -65,6 +65,6 @@ pub async fn get_or_create_channel(
   .fetch_one(executor)
   .await?;
 
-  cache.insert(username.to_owned(), id);
+  cache.put(username.to_owned(), id);
   Ok(id)
 }

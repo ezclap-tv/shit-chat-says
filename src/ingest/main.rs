@@ -58,7 +58,7 @@ async fn main() -> Result<()> {
 
   // NOTE: The channel name queries are going to slow this done somewhat, but it shouldn't be too bad.
   // If this turns out to be a problem, we can run this on a thread pool with each log line spawned as a task.
-  let mut cache = ahash::AHashMap::with_capacity(10); // set this to 1 million if the cache is used as the main username resolution strategy
+  let mut cache = db::UserCache::new(10); // set this to 1 million if the cache is used as the main username resolution strategy
   let mut soa_entry = db::logs::SOAEntry::new(2_000_000); // 56 bytes each * 2,000,000 = 100MB
   for (channel, date, entry) in walk_logs(opts.logs) {
     let channel_id = db::channels::get_or_create_channel(&db, &channel, true, &mut cache).await?;
