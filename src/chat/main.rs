@@ -145,6 +145,9 @@ async fn run(config: Config) -> Result<()> {
               // `rest` is ignored
               let user = message.user.login();
               if text.to_ascii_lowercase().starts_with(&prefix) && (message.user.is_mod() || message.user.is_streamer() || !cds.has_cd(channel, user)) {
+                if config.reply_blocklist.contains(&login.to_ascii_lowercase()) {
+                  continue;
+                }
                 let words = text.split_whitespace().skip(1).collect::<Vec<_>>();
                 let response = match words.len() {
                   0 => chain::sample(&model, "", MAX_SAMPLES),
