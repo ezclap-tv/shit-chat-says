@@ -9,14 +9,14 @@ pub struct TwitchUser {
   channel_id: Option<i32>,
 }
 #[derive(Debug)]
-pub struct SOAEntry<U> {
-  channel: Vec<i32>,
+pub struct SOAEntry<U, C = i32> {
+  channel: Vec<C>,
   chatter: Vec<U>,
   sent_at: Vec<DateTime<Utc>>,
   message: Vec<String>,
 }
 
-impl<U> SOAEntry<U> {
+impl<U, C> SOAEntry<U, C> {
   pub fn new(capacity: usize) -> Self {
     Self {
       channel: Vec::with_capacity(capacity),
@@ -26,7 +26,7 @@ impl<U> SOAEntry<U> {
     }
   }
 
-  pub fn add(&mut self, channel: i32, chatter: U, sent_at: DateTime<Utc>, message: String) {
+  pub fn add(&mut self, channel: C, chatter: U, sent_at: DateTime<Utc>, message: String) {
     self.channel.push(channel);
     self.chatter.push(chatter);
     self.sent_at.push(sent_at);
@@ -40,9 +40,22 @@ impl<U> SOAEntry<U> {
     self.message.clear();
   }
 
+  pub fn reserve(&mut self, cap: usize) {
+    let extra_cap = cap - self.channel.len().min(cap);
+    self.channel.reserve(extra_cap);
+    self.chatter.reserve(extra_cap);
+    self.sent_at.reserve(extra_cap);
+    self.message.reserve(extra_cap);
+  }
+
   #[inline]
   pub fn size(&self) -> usize {
     self.channel.len()
+  }
+
+  #[inline]
+  pub fn capacity(&self) -> usize {
+    self.channel.capacity()
   }
 }
 
@@ -115,6 +128,76 @@ impl<U> Entry<U> {
   }
 }
 
+pub async fn transfer_raw_logs(db: &crate::Database) -> Result<u64> {
+  let mut tx = db.begin().await?;
+
+  sqlx::query(
+    "CREATE TEMPORARY TABLE raw_logs_snapshot
+  (
+      id      bigserial,
+      channel varchar,
+      chatter varchar,
+      sent_at timestamp with time zone,
+      message varchar
+  );",
+  )
+  .execute(&mut tx)
+  .await?;
+
+  // Create a copy of the raw logs table
+  sqlx::query(
+    "INSERT INTO raw_logs_snapshot(id, channel, chatter, sent_at, message)
+    SELECT id, channel, chatter, sent_at, message
+    FROM raw_logs;",
+  )
+  .execute(&mut tx)
+  .await?;
+
+  // Create the user records for each channel and chatter
+  sqlx::query(
+    "INSERT INTO twitch_user (username, is_logged_as_channel)
+    SELECT DISTINCT channel, TRUE
+    FROM raw_logs_snapshot
+    ON CONFLICT (username) DO NOTHING;",
+  )
+  .execute(&mut tx)
+  .await?;
+  sqlx::query(
+    "INSERT INTO twitch_user (username)
+    SELECT DISTINCT chatter
+    FROM raw_logs_snapshot
+    ON CONFLICT (username) DO NOTHING;",
+  )
+  .execute(&mut tx)
+  .await?;
+
+  // Insert the raw logs into the main logs table
+  let rows = sqlx::query(
+    "INSERT INTO twitch_logs (channel, chatter, sent_at, message)
+    SELECT channels.id as channel, chatters.id as chatter, rl.sent_at, rl.message
+    FROM raw_logs_snapshot rl
+             JOIN twitch_user chatters ON chatters.username = rl.chatter
+             JOIN twitch_user channels ON channels.username = rl.channel;",
+  )
+  .execute(&mut tx)
+  .await?
+  .rows_affected();
+
+  // Clear up the the raw logs table
+  sqlx::query(
+    "DELETE
+    FROM raw_logs
+    USING raw_logs_snapshot rl WHERE raw_logs.id = rl.id;",
+  )
+  .execute(&mut tx)
+  .await?;
+
+  // Persist the changes.
+  tx.commit().await?;
+
+  Ok(rows)
+}
+
 /// Insert a single log entry
 pub async fn insert_one(executor: impl sqlx::PgExecutor<'_> + Copy, entry: &Entry<i32>) -> Result<()> {
   let _ = sqlx::query(
@@ -132,10 +215,32 @@ pub async fn insert_one(executor: impl sqlx::PgExecutor<'_> + Copy, entry: &Entr
   Ok(())
 }
 
+/// Inserts a batch of logs entries into the raw_logs table. The table doesn't have a primary key, any indexes, or constraints, so inserting data in bulk is extremely quick.
+pub async fn insert_soa_raw(
+  executor: impl sqlx::PgExecutor<'_> + Copy,
+  entry: &mut SOAEntry<String, String>,
+) -> Result<()> {
+  sqlx::query(
+    "
+  INSERT INTO raw_logs(channel, chatter, sent_at, message) SELECT * FROM UNNEST($1, $2, $3, $4);",
+  )
+  .bind(&entry.channel)
+  .bind(&entry.chatter)
+  .bind(&entry.sent_at)
+  .bind(&entry.message)
+  .execute(executor)
+  .await?;
+  entry.clear();
+  Ok(())
+}
+
 /// Insert log entries in batch mode (efficient for large inserts)
 ///
 /// `entries` will be cleared
-pub async fn insert_soa(executor: impl sqlx::PgExecutor<'_> + Copy, entry: &mut SOAEntry<String>) -> Result<()> {
+pub async fn insert_soa_slow(
+  executor: impl sqlx::PgExecutor<'_> + Copy,
+  entry: &mut SOAEntry<String, i32>,
+) -> Result<()> {
   // Bulk insert the chatters
   sqlx::query(
     "

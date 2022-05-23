@@ -20,15 +20,7 @@ fn default_output_directory() -> std::path::PathBuf {
 #[serde(untagged)]
 pub enum TempChannel {
   NameOnly(String),
-  Buffered {
-    name: String,
-    message_buffer_size: usize,
-  },
-  BufferedWithCache {
-    name: String,
-    message_buffer_size: usize,
-    username_cache_size: usize,
-  },
+  Buffered { name: String, message_buffer_size: usize },
 }
 
 #[derive(Deserialize)]
@@ -51,7 +43,6 @@ pub struct TwitchLogin {
 pub struct Channel {
   pub name: String,
   pub message_buffer_size: usize,
-  pub username_cache_size: usize,
 }
 
 impl From<TempChannel> for Channel {
@@ -60,7 +51,6 @@ impl From<TempChannel> for Channel {
       TempChannel::NameOnly(name) => Self {
         name,
         message_buffer_size: DEFAULT_BUF_SIZE,
-        username_cache_size: crate::sink::USERNAME_CACHE_SIZE,
       },
       TempChannel::Buffered {
         name,
@@ -68,16 +58,6 @@ impl From<TempChannel> for Channel {
       } => Self {
         name,
         message_buffer_size,
-        username_cache_size: crate::sink::USERNAME_CACHE_SIZE,
-      },
-      TempChannel::BufferedWithCache {
-        name,
-        message_buffer_size,
-        username_cache_size,
-      } => Self {
-        name,
-        message_buffer_size,
-        username_cache_size,
       },
     }
   }
@@ -111,6 +91,7 @@ impl From<TempConfig> for Config {
 impl Config {
   pub fn load<P: AsRef<Path>>(path: P) -> Result<Self> {
     let content = fs::read_to_string(path)?;
+    eprintln!("{}", content);
     let config = Config::from(serde_json::from_str::<TempConfig>(&content)?);
 
     if config.channels.is_empty() {

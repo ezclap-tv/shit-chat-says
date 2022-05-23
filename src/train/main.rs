@@ -147,6 +147,7 @@ fn main() -> Result<()> {
   if env::var("RUST_LOG").is_err() {
     env::set_var("RUST_LOG", "INFO");
   }
+  scs_sentry::from_env!();
   env_logger::init();
 
   let config = if let Some(path) = env::args().nth(1) {

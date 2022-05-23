@@ -1,5 +1,7 @@
 #!/bin/bash
-# Taken from https://stackoverflow.com/a/63346931.
+
+
+# The lines below display the cron output in docker logs. Code taken from https://stackoverflow.com/a/63346931.
 
 # Create custom stdout and stderr named pipes
 mkfifo /tmp/stdout /tmp/stderr
@@ -10,9 +12,10 @@ chmod 0666 /tmp/stdout /tmp/stderr
 tail -f /tmp/stdout &
 tail -f /tmp/stderr >&2 &
 
-echo "Saving $TRAIN_CONFIG to /binaries/train-config"
-echo "export TRAIN_CONFIG=$TRAIN_CONFIG" >> /binaries/train-config
-cat /binaries/train-config
+echo "Saving $TRAIN_CONFIG and \$SCS_DATABASE_URL to /binaries/env"
+echo "export TRAIN_CONFIG=$TRAIN_CONFIG
+export SCS_DATABASE_URL=$SCS_DATABASE_URL" >> /binaries/env
+# cat /binaries/env
 
 # Run cron
 cron -f

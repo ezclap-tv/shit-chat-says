@@ -1,21 +1,10 @@
 version: "3.7"
 
 services:
-  collector:
-    restart: always
-    build:
-      context: ..
-      dockerfile: ./docker/Dockerfile
-      target: runtime
-    entrypoint:
-      - /binaries/collector
-    command: /config/collector.json
-    volumes:
-      - ../logs:/logs
-      - ../config:/config
-
   chat:
     restart: always
+    env_file:
+      - ./.env
     build:
       context: ..
       dockerfile: ./docker/Dockerfile
@@ -27,16 +16,71 @@ services:
       - ../models:/models
       - ../config:/config
 
-  train:
-    # profiles:
-    #  - training
+  collector:
+    restart: always
+    env_file:
+      - ./.env
+    environment:
+      - SCS_DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
     build:
       context: ..
+      target: runtime
       dockerfile: ./docker/Dockerfile
-      target: trainer
+    entrypoint:
+      - /binaries/collector
+    command: /config/collector.json
+    volumes:
+      - ../logs:/logs
+      - ../config:/config
+    depends_on:
+      - db
+      - migration
+
+  tasks:
+    env_file:
+      - ./.env
+    build:
+      context: ..
+      target: tasks
+      dockerfile: ./docker/Dockerfile
     environment:
       - TRAIN_CONFIG=/config/train.json
+      - SCS_DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
     volumes:
       - ../logs:/logs
       - ../models:/models
       - ../config:/config
+    depends_on:
+      - db
+      - migration
+
+  db:
+    image: postgres:14
+    restart: always
+    command: ["postgres", "-c", "config_file=/etc/postgresql.conf"]
+    env_file:
+      - ./.env
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+      - ./postgresql.conf:/etc/postgresql.conf
+    expose:
+      - "${POSTGRES_PORT}"
+    ports:
+      - "${HOST_DB_PORT}:${POSTGRES_PORT}"
+
+  migration:
+    env_file:
+      - ./.env
+    build:
+      context: ..
+      target: database
+      dockerfile: ./docker/Dockerfile
+      args:
+        - DATABASE_HOST=${POSTGRES_HOST}
+        - DATABASE_PORT=${POSTGRES_PORT}
+        - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
+    depends_on:
+      - db
+
+volumes:
+  postgres_data:

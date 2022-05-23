@@ -1,3 +1,5 @@
 #!/bin/bash
-source /binaries/train-config
+set -e
+
+source /binaries/env
 /binaries/train $TRAIN_CONFIG

@@ -1,12 +1,13 @@
 {
+  "buffer_lifetime": "2m",
+  "filesystem_buffer_directory": "logs",
   "channels": [
     "<your_channel_name>",
     {
       "name": "<channel_with_different_buffer_size>",
-      "buffer": 2048
+      "message_buffer_size": 2048
     }
   ],
-  "output_directory": "logs",
   "credentials": {
     "login": "<bot username>",
     "token": "generate at https://twitchapps.com/tmi/"

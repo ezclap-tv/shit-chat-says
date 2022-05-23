@@ -43,26 +43,25 @@ fn walk_logs(dir: impl AsRef<Path>) -> impl Iterator<Item = (String, String, Dir
 #[tokio::main]
 async fn main() -> Result<()> {
   if env::var("RUST_LOG").is_err() {
-    env::set_var("RUST_LOG", "INFO,sqlx=WARN");
+    // env::set_var("RUST_LOG", "INFO,sqlx=WARN");
+    env::set_var("RUST_LOG", "INFO");
   }
   env_logger::init();
 
   let opts = Options::from_args_safe()?;
 
   log::info!("Connecting to {}", opts.uri);
-  let db = db::connect(("scs", "127.0.0.1", 5432, "postgres", Some("root"))).await?;
+  let db = db::connect(("scs", "127.0.0.1", 5432, "scs", Some("root"))).await?;
 
   log::info!("Reading logs from {}", opts.logs.display());
   let tz_re = Regex::new(r"# Start logging at \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} (\w+)")?;
   let msg_re = Regex::new(r"\[(\d{2}:\d{2}:\d{2})\]  (\w+): (.*)")?;
 
-  // NOTE: The channel name queries are going to slow this done somewhat, but it shouldn't be too bad.
-  // If this turns out to be a problem, we can run this on a thread pool with each log line spawned as a task.
-  let mut cache = db::UserCache::new(10); // set this to 1 million if the cache is used as the main username resolution strategy
+  let mut log_lines_ingested = 0;
+  let intermediate_transfer_threshold = 10_000_000; // insert after every 10 mil lines
+
   let mut soa_entry = db::logs::SOAEntry::new(2_000_000); // 56 bytes each * 2,000,000 = 100MB
   for (channel, date, entry) in walk_logs(opts.logs) {
-    let channel_id = db::channels::get_or_create_channel(&db, &channel, true, &mut cache).await?;
-
     let instant = std::time::Instant::now();
     log::info!("{} {} {} (collect started)", channel, date, entry.path().display());
     let mut file_tz_offset = "+0000";
@@ -80,7 +79,7 @@ async fn main() -> Result<()> {
           .with_timezone(&chrono::Utc);
         let message = message.to_string();
 
-        soa_entry.add(channel_id, chatter, sent_at, message);
+        soa_entry.add(channel.clone(), chatter, sent_at, message);
       }
     }
 
@@ -92,15 +91,39 @@ async fn main() -> Result<()> {
       instant.elapsed().as_secs_f64()
     );
 
-    db::logs::insert_soa(&db, &mut soa_entry).await?;
+    let entry_size = soa_entry.size();
+    log_lines_ingested += entry_size;
+    db::logs::insert_soa_raw(&db, &mut soa_entry).await?;
 
     log::info!(
-      "{} {} {} (file inserted in {:.4}s)\n",
+      "{} {} {} [{} lines] (file inserted in {:.4}s)\n",
       channel,
       date,
       entry.path().display(),
+      entry_size,
       instant.elapsed().as_secs_f64()
     );
+
+    if log_lines_ingested >= intermediate_transfer_threshold {
+      log_lines_ingested = 0;
+
+      let local_db = db.clone();
+      tokio::spawn(async move {
+        if let Err(e) = db::logs::transfer_raw_logs(&local_db).await {
+          log::error!("Failed to transfer logs: {}", e);
+        }
+      });
+    }
   }
+
+  log::info!("Performing a bulk transfer on raw_logs...");
+  let instant = std::time::Instant::now();
+  let rows = db::logs::transfer_raw_logs(&db).await?;
+  log::info!(
+    "Successfully ingested {} raw rows into twitch_logs in {:.4}s",
+    rows,
+    instant.elapsed().as_secs_f64()
+  );
+
   Ok(())
 }

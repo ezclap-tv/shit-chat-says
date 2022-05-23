@@ -1,0 +1,10 @@
+# Run the binary at midnight UTC
+0 0 * * * /binaries/tasks/train.sh > /tmp/stdout 2> /tmp/stderr
+# * * * * * /binaries/tasks/train.sh > /tmp/stdout 2> /tmp/stderr
+
+# Run the binary every 5 minutes
+*/5 * * * * /binaries/tasks/transfer.sh > /tmp/stdout 2> /tmp/stderr
+# * * * * * /binaries/tasks/transfer.sh > /tmp/stdout 2> /tmp/stderr
+
+# Setting everything to * configures the script to run every minute -- use for debugging
+# * * * * * /binaries/some-script.sh  > /tmp/stdout 2> /tmp/stderr
