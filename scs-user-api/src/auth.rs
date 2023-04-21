@@ -1,5 +1,6 @@
 use crate::error::FailWith;
-use actix_http::{http::header, StatusCode};
+use actix_http::StatusCode;
+use actix_web::http::header;
 use actix_web::{post, web, FromRequest, HttpResponse, Responder, Result};
 use rand::{distributions::Alphanumeric, thread_rng, Rng};
 use std::{future::Future, pin::Pin};

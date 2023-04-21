@@ -1,5 +1,6 @@
 use std::process::Stdio;
 
+use actix_http::body::BoxBody;
 use actix_web::{dev::ServiceRequest, get, post, web, HttpResponse, Scope};
 use actix_web_httpauth::{extractors::bearer::BearerAuth, middleware::HttpAuthentication};
 use async_stream::try_stream;
@@ -154,7 +155,7 @@ fn execute_command(mut cmd: Command, sink: ctx::Sink) -> impl Stream<Item = acti
   }
 }
 
-async fn capture_output(mut cmd: Command) -> actix_web::Result<String> {
+pub async fn capture_output(mut cmd: Command) -> actix_web::Result<String> {
   log::info!("running {:?}", cmd);
   let output = cmd.output().await.map_err(|e| {
     log::error!("failed to run {:?}: {}", cmd, e);
@@ -171,7 +172,7 @@ async fn capture_output(mut cmd: Command) -> actix_web::Result<String> {
   }
 }
 
-async fn get_services(ctx: web::Data<ctx::Context>) -> actix_web::Result<Vec<schema::Service>> {
+pub async fn get_services(ctx: web::Data<ctx::Context>) -> actix_web::Result<Vec<schema::Service>> {
   let lock = ctx.read().await;
   let list_names = lock.compose_command(|a| {
     a.arg("ps");
@@ -206,19 +207,19 @@ async fn get_services(ctx: web::Data<ctx::Context>) -> actix_web::Result<Vec<sch
 }
 
 #[get("/services")]
-async fn services(ctx: web::Data<ctx::Context>) -> actix_web::Result<HttpResponse> {
+pub async fn services(ctx: web::Data<ctx::Context>) -> actix_web::Result<HttpResponse> {
   Ok(HttpResponse::Ok().json(get_services(ctx).await?))
 }
 
 #[post("/service/{name}/{command}")]
-async fn manage_service(
+pub async fn manage_service(
   ctx: web::Data<ctx::Context>,
   path: web::Path<(String, String)>,
 ) -> actix_web::Result<HttpResponse> {
   let (name, command) = path.into_inner();
   if !["stop", "start"].contains(&&command[..]) {
     return Ok(
-      HttpResponse::new(actix_http::StatusCode::BAD_REQUEST).set_body(actix_http::body::AnyBody::from(
+      HttpResponse::new(actix_http::StatusCode::BAD_REQUEST).set_body(actix_http::body::BoxBody::new(
         serde_json::json!({
           "error": "Invalid command",
           "command": name,
@@ -233,7 +234,7 @@ async fn manage_service(
 
   if !services_.iter().any(|s| s.name == name) {
     return Ok(
-      HttpResponse::new(actix_http::StatusCode::BAD_REQUEST).set_body(actix_http::body::AnyBody::from(
+      HttpResponse::new(actix_http::StatusCode::BAD_REQUEST).set_body(actix_http::body::BoxBody::new(
         serde_json::json!({
           "error": "Service not found",
           "name": name,
@@ -253,7 +254,7 @@ async fn manage_service(
 }
 
 #[post("/up")]
-async fn run_compose_up(ctx: web::Data<ctx::Context>) -> actix_web::Result<HttpResponse> {
+pub async fn run_compose_up(ctx: web::Data<ctx::Context>) -> actix_web::Result<HttpResponse> {
   let sink = ensure_unlocked!(ctx, "up");
   let cmd = ctx.read().await.compose_command(|cmd| {
     cmd.arg("up");
@@ -263,7 +264,7 @@ async fn run_compose_up(ctx: web::Data<ctx::Context>) -> actix_web::Result<HttpR
 }
 
 #[post("/down")]
-async fn run_compose_down(ctx: web::Data<ctx::Context>) -> actix_web::Result<HttpResponse> {
+pub async fn run_compose_down(ctx: web::Data<ctx::Context>) -> actix_web::Result<HttpResponse> {
   let sink = ensure_unlocked!(ctx, "down");
   let cmd = ctx.read().await.compose_command(|cmd| {
     cmd.arg("down");
@@ -272,7 +273,7 @@ async fn run_compose_down(ctx: web::Data<ctx::Context>) -> actix_web::Result<Htt
 }
 
 #[post("/restart")]
-async fn restart(ctx: web::Data<ctx::Context>) -> actix_web::Result<HttpResponse> {
+pub async fn restart(ctx: web::Data<ctx::Context>) -> actix_web::Result<HttpResponse> {
   let sink = ensure_unlocked!(ctx, "restart");
   let compose_file = ctx.read().await.config.compose_file.clone();
   let lock = ctx.read_owned().await;
@@ -298,7 +299,7 @@ async fn restart(ctx: web::Data<ctx::Context>) -> actix_web::Result<HttpResponse
 }
 
 #[post("/deploy")]
-async fn deploy(ctx: web::Data<ctx::Context>) -> actix_web::Result<HttpResponse> {
+pub async fn deploy(ctx: web::Data<ctx::Context>) -> actix_web::Result<HttpResponse> {
   let sink = ensure_unlocked!(ctx, "deploy");
   let compose_file = ctx.read().await.config.compose_file.clone();
   let lock = ctx.read_owned().await;
@@ -339,7 +340,7 @@ async fn deploy(ctx: web::Data<ctx::Context>) -> actix_web::Result<HttpResponse>
 }
 
 #[get("/configs")]
-async fn configs(ctx: web::Data<ctx::Context>) -> actix_web::Result<web::Json<schema::ConfigList>> {
+pub async fn configs(ctx: web::Data<ctx::Context>) -> actix_web::Result<web::Json<schema::ConfigList>> {
   let lock = ctx.read().await;
   let config_folder = lock.config.project_source_folder.join("config");
   let ci_api_config = lock.config_path.clone();
@@ -378,12 +379,12 @@ async fn configs(ctx: web::Data<ctx::Context>) -> actix_web::Result<web::Json<sc
 }
 
 #[get("/is_running")]
-async fn is_running(ctx: web::Data<ctx::Context>) -> actix_web::Result<web::Json<bool>> {
+pub async fn is_running(ctx: web::Data<ctx::Context>) -> actix_web::Result<web::Json<bool>> {
   Ok(web::Json(ctx.try_write().is_none()))
 }
 
 #[get("/last_command")]
-async fn last_command(ctx: web::Data<ctx::Context>) -> actix_web::Result<web::Json<schema::LastCommand>> {
+pub async fn last_command(ctx: web::Data<ctx::Context>) -> actix_web::Result<web::Json<schema::LastCommand>> {
   let in_progress = ctx.try_write().is_none();
   let lock = ctx.read().await;
   let last_command = lock.last_command.clone();
@@ -427,37 +428,17 @@ impl actix_web::ResponseError for AuthenticationError {
   }
 }
 
-async fn token_validator(req: ServiceRequest, credentials: BearerAuth) -> actix_web::Result<ServiceRequest> {
+pub async fn token_validator(
+  req: ServiceRequest,
+  credentials: BearerAuth,
+) -> Result<ServiceRequest, (actix_web::Error, ServiceRequest)> {
   if let Some(ctx) = req.app_data::<web::Data<ctx::Context>>() {
     let token = credentials.token();
     if ctx.read().await.config.access_tokens.contains(token) {
       return Ok(req);
     }
-    Err(AuthenticationError::InvalidCredentials.into())
+    Err((AuthenticationError::InvalidCredentials.into(), req))
   } else {
-    Err(AuthenticationError::InternalError.into())
+    Err((AuthenticationError::InternalError.into(), req))
   }
-}
-
-pub fn routes() -> Scope<
-  impl actix_web::dev::ServiceFactory<
-    ServiceRequest,
-    Response = actix_web::dev::ServiceResponse,
-    Error = actix_web::Error,
-    Config = (),
-    InitError = (),
-  >,
-> {
-  let auth = HttpAuthentication::bearer(token_validator);
-  web::scope("v1")
-    .wrap(auth)
-    .service(run_compose_up)
-    .service(run_compose_down)
-    .service(deploy)
-    .service(restart)
-    .service(configs)
-    .service(is_running)
-    .service(last_command)
-    .service(services)
-    .service(manage_service)
 }

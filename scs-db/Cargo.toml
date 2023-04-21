@@ -12,13 +12,13 @@ path = "src/lib.rs"
 
 
 [dependencies]
-actix = "=0.12"
-actix-web = "=4.0.0-beta.12"
-sqlx = { version = "0.5.9", features = ["postgres", "chrono", "runtime-actix-rustls"] }
+actix = "0.13"
+actix-web = "4"
+sqlx = { version = "0.6", features = ["postgres", "chrono", "runtime-actix-rustls"] }
 log = "0.4.14"
-chrono = { version = "0.4.19", features = ["serde"] }
+chrono = { version = "0.4", features = ["serde"] }
 futures = "0.3.17"
-serde = { version = "1.0.130", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
 ahash = "0.7.6"
 getset = "0.1.2"
 base64 = "0.13.0"

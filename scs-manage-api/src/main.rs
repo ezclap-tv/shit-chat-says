@@ -2,7 +2,9 @@ use std::env;
 
 use actix_cors::Cors;
 use actix_web::http::header;
+use actix_web::web;
 use actix_web::{middleware, web::Data, App, HttpServer};
+use actix_web_httpauth::middleware::HttpAuthentication;
 
 mod config;
 pub mod ctx;
@@ -50,7 +52,19 @@ async fn main() -> anyhow::Result<()> {
       )
       .wrap(middleware::Compress::default())
       .wrap(middleware::Logger::default())
-      .service(v1::routes())
+      .service(
+        web::scope("v1")
+          .wrap(HttpAuthentication::bearer(v1::token_validator))
+          .service(v1::run_compose_up)
+          .service(v1::run_compose_down)
+          .service(v1::deploy)
+          .service(v1::restart)
+          .service(v1::configs)
+          .service(v1::is_running)
+          .service(v1::last_command)
+          .service(v1::services)
+          .service(v1::manage_service),
+      )
   });
   server.bind("127.0.0.1:7191").unwrap().run().await?;
   Ok(())

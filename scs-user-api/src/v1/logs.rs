@@ -48,7 +48,7 @@ pub async fn get_channel_logs(
     channel.into_inner(),
     chatter,
     pattern,
-    page_size.unwrap_or(DEFAULT_PAGE_SIZE).min(MAX_PAGE_SIZE),
+    page_size.unwrap_or(DEFAULT_PAGE_SIZE).min(MAX_PAGE_SIZE) as i32,
     cursor,
   )
   .await

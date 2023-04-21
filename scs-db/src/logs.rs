@@ -219,7 +219,7 @@ pub async fn fetch_logs_paged_with_usernames<S: Into<String>>(
   channel: S,
   chatter: Option<S>,
   pattern: Option<S>,
-  limit: u32,
+  limit: i32,
   cursor: Option<(i64, DateTime<Utc>)>,
 ) -> Result<Vec<Entry<String>>> {
   let mut query;
@@ -232,11 +232,11 @@ pub async fn fetch_logs_paged_with_usernames<S: Into<String>>(
     limit,
     cursor,
   );
-  Ok(query.fetch_all(executor).await?)
+  query.fetch_all(executor).await
 }
 
 /// Retrieve logs into a `Vec`
-///
+///f
 /// * channel - exact
 /// * chatter - exact
 /// * pattern - uses `LIKE` for matching, e.g. `%yo%`
@@ -247,7 +247,7 @@ pub async fn fetch_logs_paged<S: Into<String>>(
   channel: S,
   chatter: Option<S>,
   pattern: Option<S>,
-  limit: u32,
+  limit: i32,
   cursor: Option<(i64, DateTime<Utc>)>,
 ) -> Result<Vec<Entry<i32>>> {
   let mut query;
@@ -260,5 +260,5 @@ pub async fn fetch_logs_paged<S: Into<String>>(
     limit,
     cursor,
   );
-  Ok(query.fetch_all(executor).await?)
+  query.fetch_all(executor).await
 }
