@@ -10,7 +10,7 @@ use std::{
   path::PathBuf,
   time::{Duration, Instant},
 };
-use twitch::tmi::Message;
+use twitch::Command;
 
 // Set to 0 to disable sampling.
 const MAX_SAMPLES: usize = 4;
@@ -102,30 +102,46 @@ impl Cooldowns {
   }
 }
 
+struct State {
+  model: Box<dyn chain::TextGenerator>,
+  credentials: twitch_api::Credentials,
+  cooldowns: Cooldowns,
+  reply_times: HashMap<String, ChannelReplyTracker>,
+  prefix: String,
+  command_prefix: String,
+  config: Config,
+}
+
 async fn run(config: Config) -> Result<()> {
   log::info!("Loading model");
-  let model = chain::load_chain_of_any_supported_order(&config.model_path)?;
-  let mut cds = Cooldowns::new(&config.channels, config.user_cooldown);
+
+  let mut state = State {
+    model: chain::load_chain_of_any_supported_order(&config.model_path)?,
+    cooldowns: Cooldowns::new(&config.channels, config.user_cooldown),
+    credentials: twitch_api::Credentials::from(&config),
+    reply_times: HashMap::new(),
+    prefix: format!("@{}", config.login.to_ascii_lowercase()),
+    command_prefix: format!("${}", config.login.to_ascii_lowercase()),
+    config,
+  };
 
   'stop: loop {
     log::info!("Connecting to Twitch");
-    let mut conn = twitch::tmi::connect(config.clone().into()).await.unwrap();
+    let mut conn = twitch_api::TwitchStream::new().await?;
+    let mut error_count = 0;
 
-    let mut reply_times = std::collections::HashMap::with_capacity(config.channels.len());
-    for channel in &config.channels {
-      log::info!("Joining channel '{}'", channel);
-      conn.sender.join(channel).await?;
+    let mut reply_times = std::collections::HashMap::with_capacity(state.config.channels.len());
+    for channel in &state.config.channels {
       reply_times.insert(
         channel.to_string(),
         ChannelReplyTracker {
-          reply_timer: std::time::Instant::now().sub(config.reply_timeout),
-          message_count: config.reply_after_messages,
+          reply_timer: std::time::Instant::now().sub(state.config.reply_timeout),
+          message_count: state.config.reply_after_messages,
         },
       );
     }
-
-    let prefix = format!("@{}", config.login.to_ascii_lowercase());
-    let command_prefix = format!("${}", config.login.to_ascii_lowercase());
+    state.reply_times = reply_times;
+    conn.init(&state.credentials, &state.config.channels).await?;
 
     log::info!("Chat bot is ready");
 
@@ -135,102 +151,174 @@ async fn run(config: Config) -> Result<()> {
           log::info!("Process terminated");
           break 'stop Ok(());
         },
-        result = conn.reader.next() => match result {
-          Ok(message) => match message {
-            Message::Ping(ping) => conn.sender.pong(ping.arg()).await?,
-            Message::Privmsg(message) => {
-              let (channel, login, text) = (message.channel(), message.user.login(), message.text());
-              log::info!("[{channel}] {login}: {text}");
-              // format: `@LOGIN <seed> <...rest>`
-              // `rest` is ignored
-              let user = message.user.login();
-              if text.to_ascii_lowercase().starts_with(&prefix) && (message.user.is_mod() || message.user.is_streamer() || !cds.has_cd(channel, user)) {
-                if config.reply_blocklist.contains(&login.to_ascii_lowercase()) {
-                  continue;
-                }
-                let words = text.split_whitespace().skip(1).collect::<Vec<_>>();
-                let response = match words.len() {
-                  0 => chain::sample(&model, "", MAX_SAMPLES),
-                  1 => chain::sample(&model, words[0], MAX_SAMPLES),
-                  _ => chain::sample_seq(&model, &words, MAX_SAMPLES_FOR_SEQ_INPUT),
-                };
-                if !response.is_empty() {
-                  conn.sender.privmsg(channel, &response).await?;
-                  cds.set_cd(channel, user);
-                }
-              } else if text.to_ascii_lowercase().starts_with(&command_prefix) {
-                match text.split_whitespace().nth(1) {
-                  Some("version") => {
-                    conn.sender.privmsg(channel, &format!("SCS v{}", env!("CARGO_PKG_VERSION"))).await?;
-                  }
-                  Some("model") => {
-                    // Save to unwrap the filename here since the model has been successfully loaded.
-                    let model_name = config.model_path.file_name().unwrap();
-                    let model_snapshot = config.model_path.metadata().and_then(|m| m.modified()).map(|time| {
-                      chrono::DateTime::<chrono::Local>::from(time).with_timezone(&chrono::Utc).format("%F").to_string()
-                    }).unwrap_or_else(|_| String::from("unknown"));
-                    let model_metadata = model.model_meta_data();
-                    conn.sender.privmsg(
-                      channel,
-                      &format!(
-                        "{} (version: {}; metadata: {})",
-                        model_name.to_string_lossy(),
-                        model_snapshot,
-                        if model_metadata.is_empty() { "none" } else { model_metadata }
-                      )
-                    ).await?;
+        result = conn.receive() => match result {
+          Ok(Some(batch)) => {
+              for twitch_msg in batch.lines().map(twitch::Message::parse).filter_map(Result::ok) {
+                match twitch_msg.command() {
+                  Command::Ping => conn.pong().await?,
+                  Command::Reconnect => conn.reconnect(&state.credentials, &state.config.channels).await?,
+                  Command::Privmsg => {
+                    let channel = twitch_msg.channel().unwrap_or("???");
+                    let login = twitch_msg.prefix().and_then(|v| v.nick).unwrap_or("???");
+                    let text = twitch_msg.text().unwrap_or("???").trim();
+                    let badges = twitch_msg.tag(twitch::Tag::Badges).unwrap_or("");
+
+                    handle_message(&mut conn, &mut state, channel.strip_prefix('#').unwrap_or(channel), MessageUser {
+                      login,
+                      badges
+                    }, text).await?;
                   },
-                  Some("?") => {
-                    let words = text.split_whitespace().skip(2).collect::<Vec<_>>();
-                    if !words.is_empty() {
-                      let word_metadata = model.phrase_meta_data(&words);
-                      conn.sender.privmsg(
-                        channel,
-                        &word_metadata.replace("\n", " "),
-                      ).await?;
-                    }
-                  }
-                  Some(_) | None => ()
+                  _ => (),
                 }
-              } else if let Some(tracker) = reply_times.get_mut(channel)
-                {
-                  tracker.count_message();
-                  if !tracker.should_reply(&config) || config.reply_blocklist.contains(&login.to_ascii_lowercase()) {
-                    continue;
-                  }
-
-                  let prob = rand::thread_rng().gen_range(0.0..1f64);
-                  if config.reply_probability > 0.0 {
-                    log::info!("[{channel}] [=REPLY MODE=] Rolled {prob} vs {}", config.reply_probability);
-                  }
-                  if prob >= config.reply_probability {
-                    tracker.after_reply();
-                    continue;
-                  }
-
-
-                  let words = text.split_whitespace().collect::<Vec<_>>();
-                  let response = match words.len() {
-                    1 => chain::sample(&model, words[0], MAX_SAMPLES),
-                    _ => chain::sample_seq(&model, &words, MAX_SAMPLES_FOR_SEQ_INPUT),
-                  };
-
-                  if !response.is_empty() && response != text.trim() && !text.starts_with(&response) {
-                    tracker.after_reply();
-                    conn.sender.privmsg(channel, &format!("@{login} {response}")).await?;
-                  }
-                }
-            },
-            _ => ()
+              }
           },
-          // recoverable error, reconnect
-          Err(twitch::tmi::conn::Error::StreamClosed) => break,
-          // fatal error
-          Err(_) => break 'stop Ok(()),
+          Ok(_) => (),
+          Err(e) => {
+            log::error!("Error receiving messages: {}", e);
+            error_count += 1;
+            if error_count > 5 {
+              log::error!("Too many receive errors, reconnecting");
+              break;
+            }
+          }
         }
       }
     }
   }
+}
+
+struct MessageUser<'a> {
+  login: &'a str,
+  badges: &'a str,
+}
+
+impl<'a> MessageUser<'a> {
+  pub fn has_badge(&self, badge: &str) -> bool {
+    self.badges.contains(badge)
+  }
+  pub fn is_mod(&self) -> bool {
+    self.has_badge("moderator")
+  }
+  pub fn is_streamer(&self) -> bool {
+    self.has_badge("broadcaster")
+  }
+}
+
+async fn handle_message(
+  conn: &mut twitch_api::TwitchStream,
+  state: &mut State,
+  channel: &str,
+  user: MessageUser<'_>,
+  text: &str,
+) -> Result<()> {
+  log::info!("[{channel}] {}: {text}", user.login);
+
+  // format: `@LOGIN <seed> <...rest>`
+  // `rest` is ignored
+
+  if text.to_ascii_lowercase().starts_with(&state.prefix)
+    && (user.is_mod() || user.is_streamer() || !state.cooldowns.has_cd(channel, user.login))
+  {
+    if state.config.reply_blocklist.contains(&user.login.to_ascii_lowercase()) {
+      return Ok(());
+    }
+
+    let words = text.split_whitespace().skip(1).collect::<Vec<_>>();
+    let response = match words.len() {
+      0 => chain::sample(&state.model, "", MAX_SAMPLES),
+      1 => chain::sample(&state.model, words[0], MAX_SAMPLES),
+      _ => chain::sample_seq(&state.model, &words, MAX_SAMPLES_FOR_SEQ_INPUT),
+    };
+    if !response.is_empty() {
+      conn.respond(channel, &response).await?;
+      state.cooldowns.set_cd(channel, user.login);
+    }
+
+    return Ok(());
+  }
+
+  if text.to_ascii_lowercase().starts_with(&state.command_prefix) {
+    match text.split_whitespace().nth(1) {
+      Some("version") => {
+        conn
+          .respond(channel, &format!("SCS v{}", env!("CARGO_PKG_VERSION")))
+          .await?;
+      }
+      Some("model") => {
+        // Save to unwrap the filename here since the model has been successfully loaded.
+        let model_name = state.config.model_path.file_name().unwrap();
+        let model_snapshot = state
+          .config
+          .model_path
+          .metadata()
+          .and_then(|m| m.modified())
+          .map(|time| {
+            chrono::DateTime::<chrono::Local>::from(time)
+              .with_timezone(&chrono::Utc)
+              .format("%F")
+              .to_string()
+          })
+          .unwrap_or_else(|_| String::from("unknown"));
+        let model_metadata = state.model.model_meta_data();
+        conn
+          .respond(
+            channel,
+            &format!(
+              "{} (version: {}; metadata: {})",
+              model_name.to_string_lossy(),
+              model_snapshot,
+              if model_metadata.is_empty() {
+                "none"
+              } else {
+                model_metadata
+              }
+            ),
+          )
+          .await?;
+      }
+      Some("?") => {
+        let words = text.split_whitespace().skip(2).collect::<Vec<_>>();
+        if !words.is_empty() {
+          let word_metadata = state.model.phrase_meta_data(&words);
+          conn.respond(channel, &word_metadata.replace('\n', " ")).await?;
+        }
+      }
+      Some(_) | None => (),
+    }
+    return Ok(());
+  }
+
+  if let Some(tracker) = state.reply_times.get_mut(channel) {
+    tracker.count_message();
+    if !tracker.should_reply(&state.config) || state.config.reply_blocklist.contains(&user.login.to_ascii_lowercase()) {
+      return Ok(());
+    }
+
+    let prob = rand::thread_rng().gen_range(0.0..1f64);
+    if state.config.reply_probability > 0.0 {
+      log::info!(
+        "[{channel}] [=REPLY MODE=] Rolled {prob} vs {}",
+        state.config.reply_probability
+      );
+    }
+    if prob >= state.config.reply_probability {
+      tracker.after_reply();
+      return Ok(());
+    }
+
+    let words = text.split_whitespace().collect::<Vec<_>>();
+    let response = match words.len() {
+      1 => chain::sample(&state.model, words[0], MAX_SAMPLES),
+      _ => chain::sample_seq(&state.model, &words, MAX_SAMPLES_FOR_SEQ_INPUT),
+    };
+
+    if !response.is_empty() && response != text.trim() && !text.starts_with(&response) {
+      tracker.after_reply();
+      conn.respond(channel, &format!("@{} {response}", user.login)).await?;
+    }
+  }
+
+  Ok(())
 }
 
 const CARGO_MANIFEST_DIR: &str = env!("CARGO_MANIFEST_DIR");
@@ -243,7 +331,7 @@ async fn main() -> Result<()> {
   env_logger::try_init()?;
 
   let mut config = Config::load(
-    &env::args()
+    env::args()
       .nth(1)
       .map(PathBuf::from)
       .unwrap_or_else(|| PathBuf::from(CARGO_MANIFEST_DIR).join("config").join("chat.json")),

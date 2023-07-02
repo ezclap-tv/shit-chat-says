@@ -56,14 +56,11 @@ impl Config {
   }
 }
 
-impl From<Config> for twitch::tmi::conn::Config {
-  fn from(config: Config) -> Self {
-    twitch::tmi::conn::Config {
-      membership_data: false,
-      credentials: twitch::tmi::conn::Login::Regular {
-        login: config.login,
-        token: config.token,
-      },
-    }
+impl<'a> From<&'a Config> for twitch_api::Credentials {
+  fn from(config: &'a Config) -> Self {
+    twitch_api::Credentials::Regular(twitch_api::credentials::Regular {
+      login: config.login.clone(),
+      token: config.token.clone(),
+    })
   }
 }

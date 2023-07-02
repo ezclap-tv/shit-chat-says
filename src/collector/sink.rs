@@ -1,4 +1,4 @@
-use chrono::{Date, Utc};
+use chrono::{DateTime, Utc};
 use std::{
   fs::{self, File},
   io::{self, BufWriter, Write},
@@ -9,12 +9,12 @@ use std::{
 pub struct DailyLogSink {
   log_file_prefix: String,
   log_dir: PathBuf,
-  date: Date<Utc>,
+  date: DateTime<Utc>,
   file: BufWriter<std::fs::File>,
 }
 
 fn open_log_file(dir: &Path, prefix: &str) -> io::Result<File> {
-  let date = Utc::today().format("%F");
+  let date = Utc::now().format("%F");
   fs::OpenOptions::new()
     .create(true)
     .append(true)
@@ -27,7 +27,7 @@ impl DailyLogSink {
     if !log_dir.exists() {
       fs::create_dir_all(&log_dir)?;
     }
-    let date = Utc::today();
+    let date = Utc::now();
     let file = open_log_file(&log_dir, &log_file_prefix).map(|file| BufWriter::with_capacity(buf_size, file))?;
 
     Ok(DailyLogSink {
@@ -42,7 +42,7 @@ impl DailyLogSink {
 impl Write for DailyLogSink {
   fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
     // rotate file every day
-    let today = Utc::today();
+    let today = Utc::now();
     if today.signed_duration_since(self.date).num_days() > 0 {
       self.date = today;
       self.file.flush()?;

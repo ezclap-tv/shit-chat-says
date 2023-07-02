@@ -11,13 +11,13 @@ fn main() -> Result<()> {
 
   println!("Loading model from {}...", model_dir.display());
   let chain = chain::load_chain_of_any_supported_order(model_dir)?;
-  let mut rl = rustyline::Editor::<()>::new();
+  let mut rl = rustyline::DefaultEditor::new().unwrap();
   while let Ok(line) = rl.readline(">> ") {
     let line = line.as_str().trim();
     let generated = if line.is_empty() {
       chain::sample(&chain, "", 16)
     } else {
-      rl.add_history_entry(line);
+      rl.add_history_entry(line).unwrap();
       let words = line.split_whitespace().collect::<Vec<_>>();
       println!("{}", chain.phrase_meta_data(&words));
       if words.len() == 1 {

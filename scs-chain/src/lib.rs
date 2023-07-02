@@ -175,12 +175,12 @@ pub fn _sample_seq(generator: &dyn TextGenerator, words: &[&str], max_samples: u
   let mut output = generator
     .try_generate_text_from_token_sequence(words)
     .ok()
-    .unwrap_or_else(String::new);
-  while (output.trim().split_whitespace().count() <= 1 || output.trim() == words.join(" ")) && count < max_samples {
+    .unwrap_or_default();
+  while (output.split_whitespace().count() <= 1 || output.trim() == words.join(" ")) && count < max_samples {
     output = generator
       .try_generate_text_from_token_sequence(words)
       .ok()
-      .unwrap_or_else(String::new);
+      .unwrap_or_default();
     count += 1;
   }
   (output, count)

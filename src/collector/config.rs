@@ -101,17 +101,14 @@ impl Config {
   }
 }
 
-impl From<Config> for twitch::tmi::conn::Config {
-  fn from(c: Config) -> Self {
-    twitch::tmi::conn::Config {
-      credentials: match c.credentials {
-        Some(info) => twitch::tmi::conn::Login::Regular {
-          login: info.login,
-          token: info.token,
-        },
-        None => twitch::tmi::conn::Login::Anonymous,
-      },
-      membership_data: false,
+impl<'a> From<&'a Config> for twitch_api::Credentials {
+  fn from(c: &'a Config) -> Self {
+    match &c.credentials {
+      Some(info) => twitch_api::Credentials::Regular(twitch_api::credentials::Regular {
+        login: info.login.clone(),
+        token: info.token.clone(),
+      }),
+      None => twitch_api::Credentials::Anonymous,
     }
   }
 }
