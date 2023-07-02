@@ -17,9 +17,8 @@ pub async fn get_or_create(
   username: &str,
   channel_id: Option<i32>,
 ) -> Result<TwitchUser> {
-  Ok(
-    sqlx::query_as::<_, TwitchUser>(
-      "
+  sqlx::query_as::<_, TwitchUser>(
+    "
       WITH
       selected AS (
         SELECT * FROM twitch_user
@@ -35,12 +34,11 @@ pub async fn get_or_create(
       UNION ALL
       SELECT * FROM inserted
       ",
-    )
-    .bind(username)
-    .bind(channel_id)
-    .fetch_one(executor)
-    .await?,
   )
+  .bind(username)
+  .bind(channel_id)
+  .fetch_one(executor)
+  .await
 }
 
 pub async fn create_bulk(executor: impl sqlx::PgExecutor<'_> + Copy, usernames: &[String]) -> Result<()> {

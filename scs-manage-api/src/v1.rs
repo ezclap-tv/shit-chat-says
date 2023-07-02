@@ -1,8 +1,7 @@
 use std::process::Stdio;
 
-use actix_http::body::BoxBody;
-use actix_web::{dev::ServiceRequest, get, post, web, HttpResponse, Scope};
-use actix_web_httpauth::{extractors::bearer::BearerAuth, middleware::HttpAuthentication};
+use actix_web::{dev::ServiceRequest, get, post, web, HttpResponse};
+use actix_web_httpauth::extractors::bearer::BearerAuth;
 use async_stream::try_stream;
 use futures::{Stream, StreamExt, TryStreamExt};
 

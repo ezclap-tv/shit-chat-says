@@ -67,7 +67,7 @@ fn parse_cursor(cursor: Option<String>) -> Result<Option<(i64, chrono::DateTime<
     let decoded = String::from_utf8(bytes)
       .map_err(|e| actix_web::error::ErrorBadRequest(format!("Cursor is not a valid utf-8 string: {}", e)))?;
     let (id, sent_at) = decoded
-      .split_once(",")
+      .split_once(',')
       .ok_or_else(|| actix_web::error::ErrorBadRequest("Cursor string is not correctly formatted"))?;
     let id = id
       .parse::<i64>()
@@ -86,6 +86,6 @@ fn parse_cursor(cursor: Option<String>) -> Result<Option<(i64, chrono::DateTime<
 fn generate_cursor<T>(messages: &[db::logs::Entry<T>]) -> Option<String> {
   messages.last().map(|msg| {
     let cursor = format!("{},{}", msg.id(), msg.sent_at().to_rfc3339());
-    base64::encode_config(&cursor, base64::URL_SAFE)
+    base64::encode_config(cursor, base64::URL_SAFE)
   })
 }

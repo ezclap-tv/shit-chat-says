@@ -97,9 +97,9 @@ pub async fn insert_one(executor: impl sqlx::PgExecutor<'_> + Copy, entry: &Entr
     VALUES ($1, $2, $3, $4)
     ",
   )
-  .bind(&entry.channel)
-  .bind(&entry.chatter)
-  .bind(&entry.sent_at)
+  .bind(entry.channel)
+  .bind(entry.chatter)
+  .bind(entry.sent_at)
   .bind(&entry.message)
   .execute(executor)
   .await?;

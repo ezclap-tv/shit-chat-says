@@ -12,7 +12,7 @@ impl AccessToken {
     Self(token)
   }
 }
-impl<'a> std::borrow::Borrow<str> for AccessToken {
+impl std::borrow::Borrow<str> for AccessToken {
   fn borrow(&self) -> &str {
     self.0.borrow()
   }

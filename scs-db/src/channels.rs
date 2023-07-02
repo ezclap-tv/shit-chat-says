@@ -2,16 +2,15 @@ use super::Result;
 
 pub async fn get_logged_channels(executor: impl sqlx::PgExecutor<'_>) -> Result<Vec<String>> {
   // TODO: be move careful with this one if we start logging more channels
-  Ok(
-    sqlx::query_scalar::<_, String>(
-      "
+
+  sqlx::query_scalar::<_, String>(
+    "
       SELECT username FROM twitch_user
         WHERE is_logged_as_channel = true
       ",
-    )
-    .fetch_all(executor)
-    .await?,
   )
+  .fetch_all(executor)
+  .await
 }
 
 #[macro_export]
@@ -22,12 +21,10 @@ macro_rules! get_channel_id_sql {
 }
 
 pub async fn get_channel_id(executor: impl sqlx::PgExecutor<'_>, username: &str) -> Result<i32> {
-  Ok(
-    sqlx::query_scalar::<_, i32>(&get_channel_id_sql!("1"))
-      .bind(username)
-      .fetch_one(executor)
-      .await?,
-  )
+  sqlx::query_scalar::<_, i32>(&get_channel_id_sql!("1"))
+    .bind(username)
+    .fetch_one(executor)
+    .await
 }
 
 pub async fn get_or_create_channel(
@@ -67,7 +64,7 @@ pub async fn get_or_create_channel(
     "#,
   )
   .bind(username)
-  .bind(&is_logged_as_channel)
+  .bind(is_logged_as_channel)
   .fetch_one(executor)
   .await?;
 

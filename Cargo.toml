@@ -6,13 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [workspace]
-members = [
-    "scs-manage-api",
-    "scs-user-api",
-    "scs-chain",
-    "scs-db",
-    ".",
-]
+members = ["scs-manage-api", "scs-user-api", "scs-chain", "scs-db", "."]
 
 [[bin]]
 name = "train"
@@ -34,6 +28,10 @@ path = "src/chat/main.rs"
 name = "ingest"
 path = "src/ingest/main.rs"
 
+[lib]
+name = "twitch_api"
+path = "src/twitch_api/lib.rs"
+
 [features]
 "no-progress" = []
 
@@ -41,24 +39,24 @@ path = "src/ingest/main.rs"
 [dependencies]
 scs-chain = { path = "./scs-chain" }
 scs-db = { path = "./scs-db" }
-anyhow = "1.0.48"
-rustyline = "9.0.0"
-tokio = { version = "1.27", features = ["full"] }
+anyhow = "1.0.71"
+rustyline = "12.0.0"
+tokio = { version = "1.29.1", features = ["full"] }
 twitch = { git = "https://github.com/jprochazk/twitch-rs.git" }
-env_logger = "0.9.0"
-log = "0.4.14"
-serde = { version = "1.0.130", features = ["derive"] }
-serde_json = "1.0.71"
-chrono = { version = "0.4.19", features = ["serde"] }
-crossbeam-channel = "0.5.1"
-walkdir = "2.3.2"
-regex = "1.5.4"
+env_logger = "0.10.0"
+log = "0.4.19"
+serde = { version = "1.0.164", features = ["derive"] }
+serde_json = "1.0.99"
+chrono = { version = "0.4.26", features = ["serde"] }
+crossbeam-channel = "0.5.8"
+walkdir = "2.3.3"
+regex = "1.8.4"
 lazy_static = "1.4.0"
-indicatif = "0.16.2"
-ahash = "0.7.6"
-rand = "0.8.4"
-itertools = "0.10.1"
-humantime-serde = "1.0.1"
-futures = "0.3.17"
-structopt = "0.3.25"
-
+indicatif = "0.17.5"
+ahash = "0.8.3"
+rand = "0.8.5"
+itertools = "0.11.0"
+humantime-serde = "1.1.1"
+futures = "0.3.28"
+structopt = "0.3.26"
+tokio-tungstenite = { version = "0.19.0", features = ["rustls"] }
