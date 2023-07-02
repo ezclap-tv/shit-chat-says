@@ -6,27 +6,27 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-actix = "0.13"
-actix-web = "4"
-actix-http = "3"
-actix-cors = "0.6"
+actix = "0.13.0"
+actix-web = "4.3.1"
+actix-http = "3.3.1"
+actix-cors = "0.6.4"
 
-log = "0.4.14"
-env_logger = "0.9.0"
-tokio = { version = "1.27", features = ["full"] }
-futures = "0.3.17"
-async-fs = "1.5.0"
-cached = "0.26.2"
-anyhow = "1.0.51"
-chrono = { version = "0.4.19", features = ["serde"] }
+log = "0.4.19"
+env_logger = "0.10.0"
+tokio = { version = "1.29.1", features = ["full"] }
+futures = "0.3.28"
+async-fs = "1.6.0"
+cached = "0.44.0"
+anyhow = "1.0.71"
+chrono = { version = "0.4.26", features = ["serde"] }
 lazy_static = "1.4.0"
-serde = "1.0.131"
-serde_json = "1.0.73"
-base64 = "0.13.0"
-regex = "1.5.4"
-reqwest = { version = "0.11.7", features = ["json"] }
-structopt = "0.3.25"
-rand = "0.8.4"
+serde = "1.0.164"
+serde_json = "1.0.99"
+base64 = "0.21.2"
+regex = "1.8.4"
+reqwest = { version = "0.11.18", features = ["json"] }
+structopt = "0.3.26"
+rand = "0.8.5"
 getset = "0.1.2"
 
 scs-chain = { path = "../scs-chain" }
