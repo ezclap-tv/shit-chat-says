@@ -17,15 +17,6 @@ pub async fn create(
   twitch_access_token: &str,
   twitch_refresh_token: &str,
 ) -> Result<Token> {
-  log::info!(
-    "api {}::{}, access {}::{}, refresh {}::{}",
-    scs_user_api_token,
-    scs_user_api_token.len(),
-    twitch_access_token,
-    twitch_access_token.len(),
-    twitch_refresh_token,
-    twitch_refresh_token.len()
-  );
   sqlx::query_as::<_, Token>(
     "
       INSERT INTO tokens (user_id, scs_user_api_token, twitch_access_token, twitch_refresh_token)
