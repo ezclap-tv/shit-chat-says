@@ -3,10 +3,12 @@ pub mod sink;
 
 use anyhow::Result;
 use config::Config;
+use sink::DailyLogSink;
 use std::collections::HashMap;
 use std::env;
 use std::io::Write;
 use twitch::Command;
+use twitch_api::SuggestedAction;
 
 // TODO: handle TMI restarts + disconnections with retry
 
@@ -46,8 +48,6 @@ async fn run(config: Config) -> Result<()> {
     conn.init(&creds, &channel_names).await?;
     log::info!("Logger is ready");
 
-    let mut error_count = 0;
-
     loop {
       tokio::select! {
         _ = stop_signal() => {
@@ -58,37 +58,76 @@ async fn run(config: Config) -> Result<()> {
           break 'stop;
         },
         result = conn.receive() => match result {
-          Ok(Some(batch)) => for twitch_msg in batch.lines().map(twitch::Message::parse).filter_map(Result::ok) {
-            match twitch_msg.command() {
-              Command::Ping => conn.pong().await?,
-              Command::Reconnect => conn.reconnect(&creds, &channel_names).await?,
-              Command::Privmsg => {
-                let channel = twitch_msg.channel().map(|c| c.strip_prefix('#').unwrap_or(c));
-                let login = twitch_msg.prefix().and_then(|v| v.nick);
-                let text = twitch_msg.text();
-
-                if let (Some(channel), Some(login), Some(text)) = (channel, login, text) {
-                  log::info!("[{channel}] {login}: {text}");
-                  let mut sink = sinks.get_mut(channel).unwrap();
-                  write!(&mut sink, "{login},{text}\n")?;
-                } else {
-                  log::warn!("Invalid message: {twitch_msg:?}");
-                }
-              },
-              _ => ()
+          Ok(Some(batch)) => if let Err(e) =  handle_messages(&mut conn, &creds, &channel_names, &mut sinks, batch).await {
+            let action = SuggestedAction::from(&e);
+            log::error!("Error processing messages: {e}. Action = {action}");
+            match action {
+              SuggestedAction::KeepGoing => continue,
+              SuggestedAction::Reconnect => break,
+              SuggestedAction::Terminate => break 'stop,
             }
           }
-          Ok(_) => (),
+          Ok(None) => break,
           Err(e) => {
-            log::error!("Error receiving messages: {}", e);
-            error_count += 1;
-            if error_count > 5 {
-              log::error!("Too many receive errors, reconnecting");
-              break;
+            let action = SuggestedAction::from(&e);
+            log::error!("Error processing messages: {e}. Action = {action}");
+            match action {
+              SuggestedAction::KeepGoing => continue,
+              SuggestedAction::Reconnect => break,
+              SuggestedAction::Terminate => break 'stop,
             }
           }
         }
       }
+    }
+
+    for sink in sinks.values_mut() {
+      sink.flush()?;
+    }
+  }
+
+  Ok(())
+}
+
+async fn handle_messages(
+  conn: &mut twitch_api::TwitchStream,
+  creds: &twitch_api::Credentials,
+  channels: &[String],
+  sinks: &mut HashMap<String, DailyLogSink>,
+  batch: String,
+) -> std::result::Result<(), twitch_api::WsError> {
+  let all_messages = batch
+    .lines()
+    .map(twitch::Message::parse)
+    .filter_map(Result::ok)
+    .collect::<Vec<_>>();
+
+  // Process all the text messages first
+  for twitch_msg in all_messages
+    .iter()
+    .filter(|msg| matches!(msg.command(), Command::Privmsg))
+  {
+    let channel = twitch_msg.channel().map(|c| c.strip_prefix('#').unwrap_or(c));
+    let login = twitch_msg.prefix().and_then(|v| v.nick);
+    let text = twitch_msg.text();
+
+    if let (Some(channel), Some(login), Some(text)) = (channel, login, text) {
+      log::info!("[{channel}] {login}: {text}");
+      let mut sink = sinks.get_mut(channel).unwrap();
+      write!(&mut sink, "{login},{text}\n")?;
+    } else {
+      log::warn!("Invalid message: {twitch_msg:?}");
+    }
+  }
+
+  for twitch_msg in all_messages
+    .into_iter()
+    .filter(|msg| !matches!(msg.command(), Command::Privmsg))
+  {
+    match twitch_msg.command() {
+      Command::Ping => conn.pong().await?,
+      Command::Reconnect => conn.reconnect(creds, channels).await?,
+      _ => (),
     }
   }
 

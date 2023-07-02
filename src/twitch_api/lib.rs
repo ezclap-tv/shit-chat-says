@@ -77,7 +77,7 @@ impl TwitchStream {
     self.send("PONG").await
   }
 
-  pub async fn reconnect(&mut self, creds: &Credentials, channels: &[String]) -> anyhow::Result<()> {
+  pub async fn reconnect(&mut self, creds: &Credentials, channels: &[String]) -> std::result::Result<(), WsError> {
     let mut tries = 10;
     let mut delay = Duration::from_secs(3);
 
@@ -101,7 +101,7 @@ impl TwitchStream {
         }
         Err(e) => {
           log::warn!("Failed to reconnect: {}", e);
-          break Err(anyhow::anyhow!(format!("failed to reconnect: {e}")));
+          break Err(e);
         }
       }
     }
@@ -136,5 +136,46 @@ impl SameMessageBypass {
 impl Default for SameMessageBypass {
   fn default() -> Self {
     SameMessageBypass { flag: 0 }
+  }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum SuggestedAction {
+  KeepGoing,
+  Reconnect,
+  Terminate,
+}
+
+impl<'a> From<&'a WsError> for SuggestedAction {
+  fn from(e: &'a WsError) -> Self {
+    match e {
+      // We've received or sent a message that's too large. Extremely unlikely to happen.
+      tokio_tungstenite::tungstenite::Error::Capacity(_) => SuggestedAction::KeepGoing,
+      // The queue is unlimited by default, so this shouldn't happen.
+      tokio_tungstenite::tungstenite::Error::SendQueueFull(_) => SuggestedAction::KeepGoing,
+      // Can't really do anything about this, so just keep going.
+      tokio_tungstenite::tungstenite::Error::Utf8 => SuggestedAction::KeepGoing,
+      // This shouldn't happen, because the stream returns `None` once closed.
+      tokio_tungstenite::tungstenite::Error::ConnectionClosed
+      | tokio_tungstenite::tungstenite::Error::AlreadyClosed => SuggestedAction::Reconnect,
+      // Twitch isn't following the websocket protocol. Unlikely to happen.
+      tokio_tungstenite::tungstenite::Error::Protocol(_) => SuggestedAction::Reconnect,
+      // We've received an HTTP error while trying to upgrade the websocket connection. Unlikely to happen.
+      tokio_tungstenite::tungstenite::Error::Http(_) => SuggestedAction::Reconnect,
+      // This one covers a few errors, including badly formatted status codes and headers. Unlikely to happen.
+      tokio_tungstenite::tungstenite::Error::HttpFormat(_) => SuggestedAction::Reconnect,
+      // IO indicates a terminal error like DNS resolution failure or a broken socket.
+      tokio_tungstenite::tungstenite::Error::Io(_) => SuggestedAction::Terminate,
+      // URL error indicates that the URL we're trying to connect to is invalid. It's hardcoded to be valid, so this shouldn't happen.
+      tokio_tungstenite::tungstenite::Error::Url(_) => SuggestedAction::Terminate,
+      // TLS error, this includes protocol-level errors and other errors such as DNS errors.
+      tokio_tungstenite::tungstenite::Error::Tls(_) => SuggestedAction::Terminate,
+    }
+  }
+}
+
+impl std::fmt::Display for SuggestedAction {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    <Self as std::fmt::Debug>::fmt(self, f)
   }
 }
