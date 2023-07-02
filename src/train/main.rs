@@ -70,7 +70,7 @@ impl LogStore {
 //       the log store use some kind of filesize-based cache.
 fn collect_logs(store: &mut LogStore, config: &TrainingConfig) {
   #[cfg(not(feature = "no-progress"))]
-  let bar = ProgressBar::new(!0).with_style(
+  let bar = ProgressBar::new_spinner().with_style(
     indicatif::ProgressStyle::default_spinner()
       .template("{spinner} {pos} (files)")
       .unwrap(),
@@ -114,7 +114,7 @@ fn collect_logs(store: &mut LogStore, config: &TrainingConfig) {
 
 fn train<'a>(chain: &mut chain::Chain<2>, authored_mode: bool, logs: impl Iterator<Item = &'a str>) {
   #[cfg(not(feature = "no-progress"))]
-  let bar = ProgressBar::new(!0).with_style(
+  let bar = ProgressBar::new_spinner().with_style(
     indicatif::ProgressStyle::default_spinner()
       .template("{spinner} {pos} (files)")
       .unwrap(),
