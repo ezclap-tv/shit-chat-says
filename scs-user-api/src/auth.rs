@@ -2,6 +2,7 @@ use crate::error::FailWith;
 use actix_http::StatusCode;
 use actix_web::http::header;
 use actix_web::{post, web, FromRequest, HttpResponse, Responder, Result};
+use base64::{engine::general_purpose, Engine as _};
 use rand::{distributions::Alphanumeric, thread_rng, Rng};
 use std::{future::Future, pin::Pin};
 
@@ -95,11 +96,11 @@ impl AccessToken {
   }
 
   pub fn encode(&self) -> String {
-    base64::encode_config(format!("{}-{}", self.user_id, self.token), base64::URL_SAFE)
+    general_purpose::URL_SAFE.encode(format!("{}-{}", self.user_id, self.token))
   }
 
   pub fn decode(value: &str) -> Option<Self> {
-    let bytes = base64::decode_config(value, base64::URL_SAFE).ok()?;
+    let bytes = general_purpose::URL_SAFE.decode(value).ok()?;
     let string = String::from_utf8(bytes).ok()?;
     let (user_id, token) = string
       .split_once('-')

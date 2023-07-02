@@ -1,6 +1,7 @@
 use crate::auth;
 use crate::error::FailWith;
 use actix_web::{get, web, Responder, Result};
+use base64::{engine::general_purpose, Engine as _};
 use db::{self, Database};
 use serde::{Deserialize, Serialize};
 
@@ -62,12 +63,13 @@ fn parse_cursor(cursor: Option<String>) -> Result<Option<(i64, chrono::DateTime<
     if c.is_empty() {
       return Ok(None);
     }
-    let bytes = base64::decode_config(c, base64::URL_SAFE)
+    let bytes = general_purpose::URL_SAFE
+      .decode(c)
       .map_err(|e| actix_web::error::ErrorBadRequest(format!("Invalid cursor: {}", e)))?;
     let decoded = String::from_utf8(bytes)
       .map_err(|e| actix_web::error::ErrorBadRequest(format!("Cursor is not a valid utf-8 string: {}", e)))?;
     let (id, sent_at) = decoded
-      .split_once(",")
+      .split_once(',')
       .ok_or_else(|| actix_web::error::ErrorBadRequest("Cursor string is not correctly formatted"))?;
     let id = id
       .parse::<i64>()
@@ -86,6 +88,6 @@ fn parse_cursor(cursor: Option<String>) -> Result<Option<(i64, chrono::DateTime<
 fn generate_cursor<T>(messages: &[db::logs::Entry<T>]) -> Option<String> {
   messages.last().map(|msg| {
     let cursor = format!("{},{}", msg.id(), msg.sent_at().to_rfc3339());
-    base64::encode_config(&cursor, base64::URL_SAFE)
+    general_purpose::URL_SAFE.encode(cursor)
   })
 }

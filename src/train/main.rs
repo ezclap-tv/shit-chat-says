@@ -15,7 +15,7 @@ mod config;
 
 fn split_line(line: &str) -> Option<(&str, &str)> {
   if !line.trim().is_empty() {
-    line.split_once(",")
+    line.split_once(',')
   } else {
     None
   }
@@ -70,8 +70,11 @@ impl LogStore {
 //       the log store use some kind of filesize-based cache.
 fn collect_logs(store: &mut LogStore, config: &TrainingConfig) {
   #[cfg(not(feature = "no-progress"))]
-  let bar =
-    ProgressBar::new(!0).with_style(indicatif::ProgressStyle::default_spinner().template("{spinner} {pos} (files)"));
+  let bar = ProgressBar::new_spinner().with_style(
+    indicatif::ProgressStyle::default_spinner()
+      .template("{spinner} {pos} (files)")
+      .unwrap(),
+  );
 
   let all_channels = config
     .channels
@@ -106,13 +109,16 @@ fn collect_logs(store: &mut LogStore, config: &TrainingConfig) {
   }
 
   #[cfg(not(feature = "no-progress"))]
-  bar.finish_at_current_pos();
+  bar.finish();
 }
 
 fn train<'a>(chain: &mut chain::Chain<2>, authored_mode: bool, logs: impl Iterator<Item = &'a str>) {
   #[cfg(not(feature = "no-progress"))]
-  let bar =
-    ProgressBar::new(!0).with_style(indicatif::ProgressStyle::default_spinner().template("{spinner} {pos} (files)"));
+  let bar = ProgressBar::new_spinner().with_style(
+    indicatif::ProgressStyle::default_spinner()
+      .template("{spinner} {pos} (files)")
+      .unwrap(),
+  );
 
   for log in logs {
     #[cfg(not(feature = "no-progress"))]
@@ -127,7 +133,7 @@ fn train<'a>(chain: &mut chain::Chain<2>, authored_mode: bool, logs: impl Iterat
   }
 
   #[cfg(not(feature = "no-progress"))]
-  bar.finish_at_current_pos();
+  bar.finish();
 }
 
 fn save_model<const ORDER: usize>(
@@ -137,9 +143,9 @@ fn save_model<const ORDER: usize>(
   save_timestamped_checkpoint: bool,
 ) -> anyhow::Result<()> {
   if save_timestamped_checkpoint {
-    chain.save(&output_path.join(format!("{}-{}.chain", name, Utc::today().format("%F"))))?;
+    chain.save(output_path.join(format!("{}-{}.chain", name, Utc::now().format("%F"))))?;
   }
-  chain.save(&output_path.join(format!("{}.chain", name)))?;
+  chain.save(output_path.join(format!("{}.chain", name)))?;
   Ok(())
 }
 

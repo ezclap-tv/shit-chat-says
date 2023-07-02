@@ -3,7 +3,7 @@ use std::{
   path::PathBuf,
 };
 
-use chrono::{Date, NaiveDate, Utc};
+use chrono::{DateTime, NaiveDateTime, Utc};
 use serde::Deserialize;
 
 const CARGO_MANIFEST_DIR: &str = env!("CARGO_MANIFEST_DIR");
@@ -12,7 +12,7 @@ const CARGO_MANIFEST_DIR: &str = env!("CARGO_MANIFEST_DIR");
 pub struct TrainingConfig {
   /// Internal time filter. Only set if `model_to_fine_tune` with a timestamped name is provided.
   #[serde(skip)]
-  pub time_filter: Option<Date<Utc>>,
+  pub time_filter: Option<DateTime<Utc>>,
   /// A map of (channel name, data sources) to use for training. Defaults to all data if not provided.
   #[serde(default = "HashMap::<_, _>::default")]
   pub channels: HashMap<String, HashSet<String>>,
@@ -81,7 +81,7 @@ impl TrainingConfig {
 
   pub fn is_after_date(&self, filename: &str) -> bool {
     self.time_filter.map_or(true, |min_date| {
-      NaiveDate::parse_from_str(&filename[filename.len() - 14..], "%Y-%m-%d")
+      NaiveDateTime::parse_from_str(&filename[filename.len() - 14..], "%Y-%m-%d")
         .map(|file_date| file_date >= min_date.naive_utc())
         .map_err(|_| {
           log::error!("Log filename not timestamped, skipping: {}", filename);
@@ -130,9 +130,9 @@ impl TrainingConfig {
         .and_then(|captures| captures.get(0))
         .map(|m| m.as_str())
       {
-        config.time_filter = NaiveDate::parse_from_str(date_str, "%Y-%m-%d")
+        config.time_filter = NaiveDateTime::parse_from_str(date_str, "%Y-%m-%d")
           .ok()
-          .map(|d| Date::from_utc(d, Utc));
+          .map(|d| DateTime::from_utc(d, Utc));
       }
     }
 

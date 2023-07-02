@@ -17,30 +17,19 @@ pub async fn create(
   twitch_access_token: &str,
   twitch_refresh_token: &str,
 ) -> Result<Token> {
-  log::info!(
-    "api {}::{}, access {}::{}, refresh {}::{}",
-    scs_user_api_token,
-    scs_user_api_token.len(),
-    twitch_access_token,
-    twitch_access_token.len(),
-    twitch_refresh_token,
-    twitch_refresh_token.len()
-  );
-  Ok(
-    sqlx::query_as::<_, Token>(
-      "
+  sqlx::query_as::<_, Token>(
+    "
       INSERT INTO tokens (user_id, scs_user_api_token, twitch_access_token, twitch_refresh_token)
         VALUES ($1, $2, $3, $4)
         RETURNING *
       ",
-    )
-    .bind(user_id)
-    .bind(scs_user_api_token)
-    .bind(twitch_access_token)
-    .bind(twitch_refresh_token)
-    .fetch_one(executor)
-    .await?,
   )
+  .bind(user_id)
+  .bind(scs_user_api_token)
+  .bind(twitch_access_token)
+  .bind(twitch_refresh_token)
+  .fetch_one(executor)
+  .await
 }
 
 pub async fn delete(executor: impl sqlx::PgExecutor<'_> + Copy, scs_user_api_token: &str) -> Result<()> {
