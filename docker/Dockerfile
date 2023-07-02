@@ -42,7 +42,7 @@ RUN --mount=type=cache,target=/home/rust/.cargo/git \
 
 
 # Use a slim image for the runtime image
-FROM debian:buster-slim as runtime
+FROM debian:bullseye-slim as runtime
 
 RUN apt update && \
   apt install -y ca-certificates && \
@@ -52,7 +52,7 @@ RUN apt update && \
 COPY --from=builder /home/rust/binaries /binaries
 
 # Create a new stage for the cron-executed train
-FROM debian:buster-slim as trainer
+FROM debian:bullseye-slim as trainer
 
 RUN apt update && \ 
   apt -y install cron && \ 
