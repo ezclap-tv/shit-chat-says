@@ -10,7 +10,9 @@ use std::{
   path::PathBuf,
   time::{Duration, Instant},
 };
+use tokio_tungstenite::tungstenite::Message;
 use twitch::Command;
+use twitch_api::SuggestedAction;
 
 // Set to 0 to disable sampling.
 const MAX_SAMPLES: usize = 4;
@@ -128,7 +130,6 @@ async fn run(config: Config) -> Result<()> {
   'stop: loop {
     log::info!("Connecting to Twitch");
     let mut conn = twitch_api::TwitchStream::new().await?;
-    let mut error_count = 0;
 
     let mut reply_times = std::collections::HashMap::with_capacity(state.config.channels.len());
     for channel in &state.config.channels {
@@ -141,50 +142,73 @@ async fn run(config: Config) -> Result<()> {
       );
     }
     state.reply_times = reply_times;
-    conn.init(&state.credentials, &state.config.channels).await?;
+    conn.authenticate(&state.credentials).await?;
+    conn.schedule_joins(&state.config.channels);
 
     log::info!("Chat bot is ready");
 
     loop {
-      tokio::select! {
+      let error = tokio::select! {
         _ = stop_signal() => {
           log::info!("Process terminated");
           break 'stop Ok(());
         },
         result = conn.receive() => match result {
-          Ok(Some(batch)) => {
-              for twitch_msg in batch.lines().map(twitch::Message::parse).filter_map(Result::ok) {
-                match twitch_msg.command() {
-                  Command::Ping => conn.pong().await?,
-                  Command::Reconnect => conn.reconnect(&state.credentials, &state.config.channels).await?,
-                  Command::Privmsg => {
-                    let channel = twitch_msg.channel().unwrap_or("???");
-                    let login = twitch_msg.prefix().and_then(|v| v.nick).unwrap_or("???");
-                    let text = twitch_msg.text().unwrap_or("???").trim();
-                    let badges = twitch_msg.tag(twitch::Tag::Badges).unwrap_or("");
-
-                    handle_message(&mut conn, &mut state, channel.strip_prefix('#').unwrap_or(channel), MessageUser {
-                      login,
-                      badges
-                    }, text).await?;
-                  },
-                  _ => (),
-                }
-              }
+          Ok(Some(message)) => if let Message::Text(batch) = message {
+            handle_messages(&mut conn, &mut state, batch).await
+          } else {
+            Ok(())
           },
-          Ok(_) => (),
-          Err(e) => {
-            log::error!("Error receiving messages: {}", e);
-            error_count += 1;
-            if error_count > 5 {
-              log::error!("Too many receive errors, reconnecting");
-              break;
-            }
-          }
+          Ok(None) => break,
+          Err(e) => Err(e),
+        }
+      };
+
+      if let Err(e) = error {
+        log::error!("Error receiving or processing messages: {:?}", e);
+        let action = SuggestedAction::from(&e);
+        match action {
+          SuggestedAction::KeepGoing => (),
+          SuggestedAction::Reconnect => break,
+          SuggestedAction::Terminate => break 'stop Err(anyhow::anyhow!(e)),
         }
       }
     }
   }
+}
+
+async fn handle_messages(
+  conn: &mut twitch_api::TwitchStream,
+  state: &mut State,
+  batch: String,
+) -> std::result::Result<(), twitch_api::WsError> {
+  for twitch_msg in batch.lines().map(twitch::Message::parse).filter_map(Result::ok) {
+    match twitch_msg.command() {
+      Command::Ping => conn.pong().await?,
+      Command::Reconnect => conn.reconnect(&state.credentials, &state.config.channels).await?,
+      Command::Notice => {
+        let text = twitch_msg.text().unwrap_or("???").trim();
+        log::info!("Notice: {}", text);
+      }
+      Command::Privmsg => {
+        let channel = twitch_msg.channel().unwrap_or("???");
+        let login = twitch_msg.prefix().and_then(|v| v.nick).unwrap_or("???");
+        let text = twitch_msg.text().unwrap_or("???").trim();
+        let badges = twitch_msg.tag(twitch::Tag::Badges).unwrap_or("");
+
+        handle_message(
+          conn,
+          state,
+          channel.strip_prefix('#').unwrap_or(channel),
+          MessageUser { login, badges },
+          text,
+        )
+        .await?;
+      }
+      _ => (),
+    }
+  }
+  Ok(())
 }
 
 struct MessageUser<'a> {
@@ -210,7 +234,7 @@ async fn handle_message(
   channel: &str,
   user: MessageUser<'_>,
   text: &str,
-) -> Result<()> {
+) -> std::result::Result<(), twitch_api::WsError> {
   log::info!("[{channel}] {}: {text}", user.login);
 
   // format: `@LOGIN <seed> <...rest>`
