@@ -10,6 +10,7 @@ use std::{
   path::PathBuf,
   time::{Duration, Instant},
 };
+use tokio_tungstenite::tungstenite::Message;
 use twitch::Command;
 use twitch_api::SuggestedAction;
 
@@ -141,38 +142,35 @@ async fn run(config: Config) -> Result<()> {
       );
     }
     state.reply_times = reply_times;
-    conn.init(&state.credentials, &state.config.channels).await?;
+    conn.authenticate(&state.credentials).await?;
+    conn.schedule_joins(&state.config.channels);
 
     log::info!("Chat bot is ready");
 
     loop {
-      tokio::select! {
+      let error = tokio::select! {
         _ = stop_signal() => {
           log::info!("Process terminated");
           break 'stop Ok(());
         },
         result = conn.receive() => match result {
-          Ok(Some(batch)) => {
-            if let Err(e) = handle_messages(&mut conn, &mut state, batch).await {
-              let action = SuggestedAction::from(&e);
-              log::error!("Error processing messages: {e}. Action = {action}");
-              match action {
-                SuggestedAction::KeepGoing => continue,
-                SuggestedAction::Reconnect => break,
-                SuggestedAction::Terminate => break 'stop Err(anyhow::anyhow!(e)),
-              }
-            }
+          Ok(Some(message)) => if let Message::Text(batch) = message {
+            handle_messages(&mut conn, &mut state, batch).await
+          } else {
+            Ok(())
           },
           Ok(None) => break,
-          Err(e) => {
-            let action = SuggestedAction::from(&e);
-            log::error!("Error receiving messages: {e}. Action = {action}");
-            match action {
-              SuggestedAction::KeepGoing => continue,
-              SuggestedAction::Reconnect => break,
-              SuggestedAction::Terminate => break 'stop Err(anyhow::anyhow!(e)),
-            }
-          }
+          Err(e) => Err(e),
+        }
+      };
+
+      if let Err(e) = error {
+        log::error!("Error receiving or processing messages: {:?}", e);
+        let action = SuggestedAction::from(&e);
+        match action {
+          SuggestedAction::KeepGoing => (),
+          SuggestedAction::Reconnect => break,
+          SuggestedAction::Terminate => break 'stop Err(anyhow::anyhow!(e)),
         }
       }
     }

@@ -1,15 +1,18 @@
-pub mod config;
-pub mod sink;
-
-use anyhow::Result;
-use config::Config;
-use sink::DailyLogSink;
 use std::collections::HashMap;
 use std::env;
 use std::io::Write;
+
+use anyhow::Result;
+use tokio_tungstenite::tungstenite::Message;
 use twitch::Command;
+
+use config::Config;
 use twitch_api::SuggestedAction;
 
+pub mod config;
+pub mod sink;
+
+use sink::DailyLogSink;
 // TODO: handle TMI restarts + disconnections with retry
 
 #[cfg(target_family = "windows")]
@@ -45,38 +48,38 @@ async fn run(config: Config) -> Result<()> {
         sink::DailyLogSink::new(config.output_directory.clone(), channel.name.clone(), channel.buffer)?,
       );
     }
-    conn.init(&creds, &channel_names).await?;
-    log::info!("Logger is ready");
 
+    conn.authenticate(&creds).await?;
+    conn.schedule_joins(&channel_names);
+
+    log::info!("Entering main loop.");
     loop {
-      tokio::select! {
-        _ = stop_signal() => {
-          log::info!("Process terminated");
-          for sink in sinks.values_mut() {
-            sink.flush()?;
-          }
-          break 'stop;
-        },
-        result = conn.receive() => match result {
-          Ok(Some(batch)) => if let Err(e) =  handle_messages(&mut conn, &creds, &channel_names, &mut sinks, batch).await {
-            let action = SuggestedAction::from(&e);
-            log::error!("Error processing messages: {e}. Action = {action}");
-            match action {
-              SuggestedAction::KeepGoing => continue,
-              SuggestedAction::Reconnect => break,
-              SuggestedAction::Terminate => break 'stop,
+      let error = tokio::select! {
+          _ = stop_signal() => {
+            log::info!("Process terminated");
+            for sink in sinks.values_mut() {
+              sink.flush()?;
             }
-          }
-          Ok(None) => break,
-          Err(e) => {
-            let action = SuggestedAction::from(&e);
-            log::error!("Error processing messages: {e}. Action = {action}");
-            match action {
-              SuggestedAction::KeepGoing => continue,
-              SuggestedAction::Reconnect => break,
-              SuggestedAction::Terminate => break 'stop,
-            }
-          }
+            break 'stop;
+          },
+          result = conn.receive() => match result {
+            Ok(Some(message)) => if let Message::Text(batch) = message {
+              handle_messages(&mut conn, &creds, &channel_names, &mut sinks, batch).await
+            } else {
+              Ok(())
+            },
+            Ok(None) => break,
+            Err(e) => Err(e),
+          },
+      };
+
+      if let Err(e) = error {
+        log::error!("Error receiving or processing messages: {:?}", e);
+        let action = SuggestedAction::from(&e);
+        match action {
+          SuggestedAction::KeepGoing => (),
+          SuggestedAction::Reconnect => break,
+          SuggestedAction::Terminate => break 'stop,
         }
       }
     }

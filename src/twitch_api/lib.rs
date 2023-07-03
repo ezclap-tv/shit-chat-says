@@ -11,9 +11,20 @@ pub mod credentials;
 pub use credentials::Credentials;
 pub type WsError = tokio_tungstenite::tungstenite::Error;
 
+/// According to the docs, a user may attempt up to 20 JOINs per 10 seconds.
+/// See https://dev.twitch.tv/docs/irc/#rate-limits
+const CLOCK_SKEW: Duration = Duration::from_secs(3);
+const JOINS_PER_PERIOD: usize = 20;
+const PERIOD_DURATION: Duration = Duration::from_secs(10).saturating_add(CLOCK_SKEW);
+type JoinBatch = (usize, Vec<String>);
+
 pub struct TwitchStream {
   uri: String,
   ws: WebSocketStream<MaybeTlsStream<TcpStream>>,
+  channel: (
+    tokio::sync::mpsc::UnboundedSender<JoinBatch>,
+    tokio::sync::mpsc::UnboundedReceiver<JoinBatch>,
+  ),
   smb: SameMessageBypass,
 }
 
@@ -25,17 +36,13 @@ impl TwitchStream {
   pub async fn with_uri(uri: impl Into<String>) -> Result<Self, WsError> {
     let uri = uri.into();
     let (ws, _) = tokio_tungstenite::connect_async(&uri).await?;
+    let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
     Ok(Self {
       ws,
       uri,
+      channel: (tx, rx),
       smb: SameMessageBypass::default(),
     })
-  }
-
-  pub async fn init(&mut self, credentials: &Credentials, channels: &[String]) -> Result<(), WsError> {
-    self.authenticate(credentials).await?;
-    self.join(channels).await?;
-    Ok(())
   }
 
   pub async fn authenticate(&mut self, credentials: &Credentials) -> Result<(), WsError> {
@@ -49,15 +56,31 @@ impl TwitchStream {
     Ok(())
   }
 
-  pub async fn join(&mut self, channels: &[String]) -> Result<(), WsError> {
-    log::info!("Joining channels: {}", channels.join(", "));
+  pub fn schedule_joins(&mut self, channels: &[String]) -> tokio::task::JoinHandle<()> {
+    let batches = channels
+      .chunks(JOINS_PER_PERIOD)
+      .map(|c| c.to_vec())
+      .rev()
+      .collect::<Vec<_>>();
+    let tx = self.channel.0.clone();
 
-    self
-      .send(format!(
-        "JOIN {}",
-        channels.iter().map(|c| format!("#{c}")).collect::<Vec<_>>().join(",")
-      ))
-      .await
+    tokio::spawn(async move {
+      log::info!(
+        "[JOIN] Join task spawned. Working with {} batches to be completed in around {}s",
+        batches.len(),
+        PERIOD_DURATION.as_secs() * (batches.len() - 1) as u64
+      );
+      let mut index = 0;
+      let mut batches = batches;
+      let mut timer = tokio::time::interval(PERIOD_DURATION);
+
+      while let Some(batch) = batches.pop() {
+        timer.tick().await;
+        log::info!("[JOIN] Queueing JOIN batch #{}", index + 1);
+        tx.send((index, batch)).unwrap();
+        index += 1;
+      }
+    })
   }
 
   pub async fn respond(&mut self, channel: &str, content: &str) -> Result<(), WsError> {
@@ -65,11 +88,16 @@ impl TwitchStream {
     self.send(text).await
   }
 
-  pub async fn receive(&mut self) -> Result<Option<String>, WsError> {
-    match self.ws.next().await {
-      Some(Ok(Message::Text(batch))) => Ok(Some(batch)),
-      Some(Ok(_)) | None => Ok(None),
-      Some(Err(e)) => Err(e),
+  pub async fn receive(&mut self) -> Result<Option<Message>, WsError> {
+    tokio::select! {
+      msg = self.channel.1.recv() => {
+        if let Some((index, batch)) = msg {
+          log::info!("[JOIN] Received JOIN batch #{}", index + 1);
+          self.join_batch(&batch).await?;
+        }
+        self.ws.next().await.transpose()
+      },
+      msg = self.ws.next() => msg.transpose(),
     }
   }
 
@@ -86,9 +114,10 @@ impl TwitchStream {
 
     loop {
       let mut new_stream = Self::with_uri(self.uri.clone()).await?;
-      match new_stream.init(creds, channels).await {
+      match new_stream.authenticate(creds).await {
         Ok(_) => {
           *self = new_stream;
+          self.schedule_joins(channels);
           break Ok(());
         }
         Err(e) if tries > 0 => {
@@ -105,6 +134,17 @@ impl TwitchStream {
         }
       }
     }
+  }
+
+  async fn join_batch(&mut self, channels: &[String]) -> Result<(), WsError> {
+    log::info!("Joining channels: {}", channels.join(", "));
+
+    self
+      .send(format!(
+        "JOIN {}",
+        channels.iter().map(|c| format!("#{c}")).collect::<Vec<_>>().join(",")
+      ))
+      .await
   }
 
   async fn send(&mut self, msg: impl Into<String>) -> Result<(), WsError> {
