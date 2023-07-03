@@ -3107,7 +3107,7 @@ dependencies = [
 
 [[package]]
 name = "shit-chat-says"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "ahash 0.8.3",
  "anyhow",
