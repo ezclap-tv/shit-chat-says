@@ -30,7 +30,7 @@ pub struct TwitchStream {
 
 impl TwitchStream {
   pub async fn new() -> Result<Self, WsError> {
-    Self::with_uri("ws://irc-ws.chat.twitch.tv:80").await
+    Self::with_uri("wss://irc-ws.chat.twitch.tv:443").await
   }
 
   pub async fn with_uri(uri: impl Into<String>) -> Result<Self, WsError> {
