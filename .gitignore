@@ -1,5 +1,6 @@
 /target
 
+/docker/postgres-data
 /data/
 models/**/*
 /logs/

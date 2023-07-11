@@ -3,7 +3,7 @@ use std::{borrow::Cow, sync::Arc};
 use crossbeam_channel::{unbounded, Receiver, Sender};
 use tokio::sync::RwLock;
 
-use crate::schema;
+use crate::{config::ComposeSettings, schema};
 
 pub type Sink = Sender<schema::CommandLine>;
 
@@ -30,7 +30,7 @@ impl State {
   }
 
   pub fn compose_command(&self, args: impl Fn(&mut tokio::process::Command)) -> tokio::process::Command {
-    compose_command(&self.config.compose_file, args)
+    compose_command(&self.config.compose, args)
   }
 
   pub fn set_command<S: Into<Cow<'static, str>>>(&mut self, command: S) -> Sender<schema::CommandLine> {
@@ -52,13 +52,14 @@ impl State {
 }
 
 pub(crate) fn compose_command(
-  compose_file: &std::path::Path,
+  settings: &ComposeSettings,
   args: impl Fn(&mut tokio::process::Command),
 ) -> tokio::process::Command {
   command("docker-compose", move |cmd| {
     cmd.env("COMPOSE_DOCKER_CLI_BUILD", "1");
     cmd.env("DOCKER_BUILDKIT", "1");
-    cmd.arg("-f").arg(compose_file);
+    cmd.arg("-f").arg(&settings.path);
+    cmd.arg("--profile").arg(&settings.profile);
     args(cmd);
   })
 }
