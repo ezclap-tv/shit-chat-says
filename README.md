@@ -4,6 +4,8 @@ A set of services for collecting Twitch chat logs, training a Markov chain on th
 
 ### Usage
 
+Set up the configs and `.env` by copying and filling them out.
+
 #### With Docker
 
 Requires `docker-compose` v1.28+
@@ -20,22 +22,28 @@ PS > # powershell
 PS > $env:COMPOSE_DOCKER_CLI_BUILD=1; $env:DOCKER_BUILDKIT=1; <command>
 ```
 
-1. Build the base image
+1. Build the base image. Choose the desired _profile_ according to the table below.
+
+| profile | services                                                      | description                                                   |
+| ------- | ------------------------------------------------------------- | ------------------------------------------------------------- |
+| all     | `collector`, `chat`, `train`, `db`, `user-api`, `migrations`  | Run all services, including the database and user-facing API. |
+| chatbot | `collector`, `chat`, `train`                                  | Run only the chatbot, log collector, and model trainer.       |
+| db      | `db`, `migrations`                                            | Start, migrate, and seed the database.                        |
 
 ```bash
-$ docker-compose -f docker/docker-compose.yml build
+$ docker-compose -f docker/docker-compose.yml build --profile all
 ```
 
-2. Run the binary you want (todo: start all services independently instead)
+2. Run the binary you want.
 
 ```bash
 $ docker-compose -f docker/docker-compose.yml run --rm collector
 ```
 
-3. To run multiple services at the same time, use the command below (add `-d` to run it in the background)
+3. To run multiple services at the same time, use the command below (add `-d` to run it in the background).
 
 ```bash
-$ docker-compose -f docker/docker-compose.yml up
+$ docker-compose -f docker/docker-compose.yml up --profile all
 ```
 
 #### Without Docker

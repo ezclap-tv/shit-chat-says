@@ -2,6 +2,7 @@ version: "3.7"
 
 services:
   collector:
+    profiles: ["all", "chatbot"]
     restart: always
     build:
       context: ..
@@ -15,6 +16,7 @@ services:
       - ../config:/config
 
   chat:
+    profiles: ["all", "chatbot"]
     restart: always
     build:
       context: ..
@@ -28,8 +30,7 @@ services:
       - ../config:/config
 
   train:
-    # profiles:
-    #  - training
+    profiles: ["all", "chatbot"]
     build:
       context: ..
       dockerfile: ./docker/Dockerfile
@@ -40,3 +41,74 @@ services:
       - ../logs:/logs
       - ../models:/models
       - ../config:/config
+
+  user-api:
+    profiles: ["all"]
+    restart: always
+    build:
+      context: ..
+      dockerfile: ./docker/Dockerfile
+      target: runtime
+    ports:
+      - "${SCS_USER_API_PORT:-7192}:8080"
+    entrypoint:
+      - /binaries/scs-user-api
+    volumes:
+      - ../models:/models
+      - ../config:/config
+    env_file: "../.env"
+    environment:
+      SCS_DB_HOST: ${SCS_DB_HOST:-db}
+      SCS_DB_PORT: ${SCS_DB_PORT:-5432}
+      SCS_DB_NAME: ${SCS_DB_USER:-scs}
+      SCS_DB_USER: ${SCS_DB_USER:-scs}
+      SCS_DB_PASSWORD: ${SCS_DB_PASSWORD}
+      SCS_USER_API_MODEL_DIR: /models
+      SCS_USER_API_HOST: 0.0.0.0
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 3s
+      timeout: 10s
+      retries: 5
+  
+  db:
+    profiles: ["all", "db"]
+    image: postgres:15
+    restart: always
+    expose:
+      - "${SCS_DB_PORT:-5432}"
+    ports:
+      - "${SCS_DB_PORT:-5432}:${SCS_DB_PORT:-5432}"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    env_file: "../.env"
+    environment:
+      - POSTGRES_DB=${SCS_DB_NAME:-scs}
+      - POSTGRES_USER=${SCS_DB_USER:-scs}
+      - POSTGRES_PASSWORD=${SCS_DB_PASSWORD}
+    volumes:
+      - ./postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${SCS_DB_USER:-scs}"]
+      interval: 3s
+      timeout: 10s
+      retries: 5
+  
+  migrations:
+    profiles: ["all", "db"]
+    restart: on-failure
+    build:
+      context: ..
+      dockerfile: ./docker/Dockerfile
+      target: migrations
+    env_file: "../.env"
+    environment:
+      SCS_DB_HOST: ${SCS_DB_HOST:-db}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      db:
+        condition: service_healthy

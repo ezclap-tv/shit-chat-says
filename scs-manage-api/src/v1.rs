@@ -274,18 +274,18 @@ pub async fn run_compose_down(ctx: web::Data<ctx::Context>) -> actix_web::Result
 #[post("/restart")]
 pub async fn restart(ctx: web::Data<ctx::Context>) -> actix_web::Result<HttpResponse> {
   let sink = ensure_unlocked!(ctx, "restart");
-  let compose_file = ctx.read().await.config.compose_file.clone();
+  let compose = ctx.read().await.config.compose.clone();
   let lock = ctx.read_owned().await;
   // docker-compose down
   let stream = execute_command(
-    ctx::compose_command(&compose_file, |cmd| {
+    ctx::compose_command(&compose, |cmd| {
       cmd.arg("down");
     }),
     sink.clone(),
   )
   // docker-compose up -d
   .chain(execute_command(
-    ctx::compose_command(&compose_file, |cmd| {
+    ctx::compose_command(&compose, |cmd| {
       cmd.arg("up");
       cmd.arg("-d");
     }),
@@ -300,7 +300,7 @@ pub async fn restart(ctx: web::Data<ctx::Context>) -> actix_web::Result<HttpResp
 #[post("/deploy")]
 pub async fn deploy(ctx: web::Data<ctx::Context>) -> actix_web::Result<HttpResponse> {
   let sink = ensure_unlocked!(ctx, "deploy");
-  let compose_file = ctx.read().await.config.compose_file.clone();
+  let compose = ctx.read().await.config.compose.clone();
   let lock = ctx.read_owned().await;
 
   // git pull
@@ -312,21 +312,21 @@ pub async fn deploy(ctx: web::Data<ctx::Context>) -> actix_web::Result<HttpRespo
   )
   // docker-compose build
   .chain(execute_command(
-    ctx::compose_command(&compose_file, |cmd| {
+    ctx::compose_command(&compose, |cmd| {
       cmd.arg("build");
     }),
     sink.clone(),
   ))
   // docker-compose down
   .chain(execute_command(
-    ctx::compose_command(&compose_file, |cmd| {
+    ctx::compose_command(&compose, |cmd| {
       cmd.arg("down");
     }),
     sink.clone(),
   ))
   // docker compose up -d
   .chain(execute_command(
-    ctx::compose_command(&compose_file, |cmd| {
+    ctx::compose_command(&compose, |cmd| {
       cmd.arg("up");
       cmd.arg("-d");
     }),

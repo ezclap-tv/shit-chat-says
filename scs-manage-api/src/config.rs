@@ -47,9 +47,25 @@ where
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
-  pub compose_file: std::path::PathBuf,
   pub project_source_folder: std::path::PathBuf,
   pub access_tokens: HashSet<AccessToken>,
+  #[serde(flatten)]
+  pub compose: ComposeSettings,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ComposeSettings {
+  #[serde(alias = "compose_file")]
+  pub path: std::path::PathBuf,
+  /// The desired target profile from docker-compose.yml
+  #[serde(default = "ComposeSettings::default_profile")]
+  pub profile: String,
+}
+
+impl ComposeSettings {
+  fn default_profile() -> String {
+    "chatbot".to_owned()
+  }
 }
 
 impl Config {
@@ -58,7 +74,7 @@ impl Config {
       &std::fs::read_to_string(path.as_ref())
         .map_err(|_| anyhow::anyhow!("Could not read the config file {}", path.as_ref().display()))?,
     )?;
-    config.compose_file = Self::process_path(&config.compose_file, "Compose file", false)?;
+    config.compose.path = Self::process_path(&config.compose.path, "Compose file", false)?;
     config.project_source_folder = Self::process_path(&config.project_source_folder, "Source folder", true)?;
     if config.access_tokens.is_empty() {
       log::error!("No access tokens were specified -- the API is going to be be inaccessible. Please provide at least one access token.");

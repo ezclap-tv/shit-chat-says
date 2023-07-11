@@ -1,5 +1,6 @@
 use actix_cors::Cors;
 use actix_web::{self, get, http::header, middleware, web::Data, App, HttpResponse, HttpServer};
+use db::ConnString;
 use std::{env, path::PathBuf};
 use structopt::StructOpt;
 
@@ -13,10 +14,38 @@ mod v1;
 #[derive(Debug, StructOpt)]
 #[structopt(name = "scs-user-api", about = "SCS User API")]
 struct Options {
-  #[structopt(long, env = "USER_API_CLIENT_SECRET")]
+  #[structopt(long, env = "SCS_USER_API_HOST", default_value = "127.0.0.1")]
+  host: String,
+  #[structopt(long, env = "SCS_USER_API_CLIENT_SECRET")]
   secret: String,
-  #[structopt(long, env = "USER_API_MODEL_DIR", parse(from_os_str))]
+  #[structopt(long, env = "SCS_USER_API_MODEL_DIR", parse(from_os_str))]
   model_dir: Option<PathBuf>,
+}
+
+#[derive(StructOpt)]
+struct DbOptions {
+  #[structopt(long, env = "SCS_DB_HOST", default_value = "localhost")]
+  host: String,
+  #[structopt(long, env = "SCS_DB_PORT", default_value = "5432")]
+  port: u16,
+  #[structopt(long, env = "SCS_DB_NAME", default_value = "scs")]
+  name: String,
+  #[structopt(long, env = "SCS_DB_USER", default_value = "scs")]
+  user: String,
+  #[structopt(long, env = "SCS_DB_PASSWORD")]
+  password: Option<String>,
+}
+
+impl From<DbOptions> for ConnString {
+  fn from(val: DbOptions) -> Self {
+    ConnString::from((
+      &val.name[..],
+      &val.host[..],
+      val.port,
+      &val.user[..],
+      val.password.as_ref().map(|s| &s[..]),
+    ))
+  }
 }
 
 #[get("/health")]
@@ -32,6 +61,7 @@ async fn main() -> anyhow::Result<()> {
   env_logger::init();
 
   let options = Options::from_args_safe()?;
+  let db_options = DbOptions::from_args_safe()?;
 
   let client_secret = auth::ClientSecret(options.secret);
   let model_dir = options.model_dir.unwrap_or_else(|| {
@@ -41,7 +71,7 @@ async fn main() -> anyhow::Result<()> {
   });
 
   let ctx = ctx::Context::new(ctx::State::new(model_dir));
-  let db = db::connect(("scs", "127.0.0.1", 5432, "postgres", Some("root"))).await?;
+  let db = db::connect(db_options).await?;
 
   let req_client = reqwest::Client::new();
 
@@ -66,7 +96,7 @@ async fn main() -> anyhow::Result<()> {
       .service(auth::create_token)
       .service(v1::routes())
   });
-  server.bind("127.0.0.1:8080").unwrap().run().await?;
+  server.bind(format!("{}:8080", options.host)).unwrap().run().await?;
 
   Ok(())
 }
