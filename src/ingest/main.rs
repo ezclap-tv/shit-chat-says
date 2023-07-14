@@ -92,7 +92,7 @@ async fn main() -> Result<()> {
       instant.elapsed().as_secs_f64()
     );
 
-    db::logs::insert_soa(&db, &mut soa_entry).await?;
+    db::logs::insert_soa_slow(&db, &mut soa_entry).await?;
 
     log::info!(
       "{} {} {} (file inserted in {:.4}s)\n",

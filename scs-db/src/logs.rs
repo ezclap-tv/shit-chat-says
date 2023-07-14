@@ -1,16 +1,22 @@
 use super::Result;
-use crate::users;
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 
-pub struct SOAEntry {
-  channel: Vec<i32>,
-  chatter: Vec<String>,
+#[derive(Debug, sqlx::FromRow, Serialize)]
+pub struct TwitchUser {
+  id: i32,
+  username: String,
+  channel_id: Option<i32>,
+}
+#[derive(Debug)]
+pub struct SOAEntry<U, C = i32> {
+  channel: Vec<C>,
+  chatter: Vec<U>,
   sent_at: Vec<DateTime<Utc>>,
   message: Vec<String>,
 }
 
-impl SOAEntry {
+impl<U, C> SOAEntry<U, C> {
   pub fn new(capacity: usize) -> Self {
     Self {
       channel: Vec::with_capacity(capacity),
@@ -20,7 +26,7 @@ impl SOAEntry {
     }
   }
 
-  pub fn add(&mut self, channel: i32, chatter: String, sent_at: DateTime<Utc>, message: String) {
+  pub fn add(&mut self, channel: C, chatter: U, sent_at: DateTime<Utc>, message: String) {
     self.channel.push(channel);
     self.chatter.push(chatter);
     self.sent_at.push(sent_at);
@@ -33,18 +39,50 @@ impl SOAEntry {
     self.sent_at.clear();
     self.message.clear();
   }
+
+  pub fn reserve(&mut self, cap: usize) {
+    let extra_cap = cap - self.channel.len().min(cap);
+    self.channel.reserve(extra_cap);
+    self.chatter.reserve(extra_cap);
+    self.sent_at.reserve(extra_cap);
+    self.message.reserve(extra_cap);
+  }
+
+  #[inline]
+  pub fn size(&self) -> usize {
+    self.channel.len()
+  }
+
+  #[inline]
+  pub fn capacity(&self) -> usize {
+    self.channel.capacity()
+  }
 }
 
-pub type ResolvedEntry = Entry<String>;
-pub type RawEntry = Entry<i32>;
+pub type ResolvedLogRecord = Entry<i32>;
 
 #[derive(Debug, sqlx::FromRow, Serialize)]
 pub struct Entry<U> {
-  id: i64,
-  channel: U,
-  chatter: U,
-  sent_at: DateTime<Utc>,
-  message: String,
+  pub id: i64,
+  pub channel: U,
+  pub chatter: U,
+  pub sent_at: DateTime<Utc>,
+  pub message: String,
+}
+
+impl<U> Clone for Entry<U>
+where
+  U: Clone,
+{
+  fn clone(&self) -> Self {
+    Self {
+      id: self.id,
+      channel: self.channel.clone(),
+      chatter: self.chatter.clone(),
+      sent_at: self.sent_at,
+      message: self.message.clone(),
+    }
+  }
 }
 
 impl<U> Entry<U> {
@@ -89,6 +127,76 @@ impl<U> Entry<U> {
   }
 }
 
+pub async fn transfer_raw_logs(db: &crate::Database) -> Result<u64> {
+  let mut tx = db.begin().await?;
+
+  sqlx::query(
+    "CREATE TEMPORARY TABLE raw_logs_snapshot
+  (
+      id      bigserial,
+      channel varchar,
+      chatter varchar,
+      sent_at timestamp with time zone,
+      message varchar
+  );",
+  )
+  .execute(&mut tx)
+  .await?;
+
+  // Create a copy of the raw logs table
+  sqlx::query(
+    "INSERT INTO raw_logs_snapshot(id, channel, chatter, sent_at, message)
+    SELECT id, channel, chatter, sent_at, message
+    FROM raw_logs;",
+  )
+  .execute(&mut tx)
+  .await?;
+
+  // Create the user records for each channel and chatter
+  sqlx::query(
+    "INSERT INTO twitch_user (username, is_logged_as_channel)
+    SELECT DISTINCT channel, TRUE
+    FROM raw_logs_snapshot
+    ON CONFLICT (username) DO NOTHING;",
+  )
+  .execute(&mut tx)
+  .await?;
+  sqlx::query(
+    "INSERT INTO twitch_user (username)
+    SELECT DISTINCT chatter
+    FROM raw_logs_snapshot
+    ON CONFLICT (username) DO NOTHING;",
+  )
+  .execute(&mut tx)
+  .await?;
+
+  // Insert the raw logs into the main logs table
+  let rows = sqlx::query(
+    "INSERT INTO twitch_logs (channel, chatter, sent_at, message)
+    SELECT channels.id as channel, chatters.id as chatter, rl.sent_at, rl.message
+    FROM raw_logs_snapshot rl
+             JOIN twitch_user chatters ON chatters.username = rl.chatter
+             JOIN twitch_user channels ON channels.username = rl.channel;",
+  )
+  .execute(&mut tx)
+  .await?
+  .rows_affected();
+
+  // Clear up the the raw logs table
+  sqlx::query(
+    "DELETE
+    FROM raw_logs
+    USING raw_logs_snapshot rl WHERE raw_logs.id = rl.id;",
+  )
+  .execute(&mut tx)
+  .await?;
+
+  // Persist the changes.
+  tx.commit().await?;
+
+  Ok(rows)
+}
+
 /// Insert a single log entry
 pub async fn insert_one(executor: impl sqlx::PgExecutor<'_> + Copy, entry: &Entry<i32>) -> Result<()> {
   let _ = sqlx::query(
@@ -106,12 +214,43 @@ pub async fn insert_one(executor: impl sqlx::PgExecutor<'_> + Copy, entry: &Entr
   Ok(())
 }
 
+/// Inserts a batch of logs entries into the raw_logs table. The table doesn't have a primary key, any indexes, or constraints, so inserting data in bulk is extremely quick.
+pub async fn insert_soa_raw(
+  executor: impl sqlx::PgExecutor<'_> + Copy,
+  entry: &mut SOAEntry<String, String>,
+) -> Result<()> {
+  sqlx::query(
+    "
+  INSERT INTO raw_logs(channel, chatter, sent_at, message) SELECT * FROM UNNEST($1, $2, $3, $4);",
+  )
+  .bind(&entry.channel)
+  .bind(&entry.chatter)
+  .bind(&entry.sent_at)
+  .bind(&entry.message)
+  .execute(executor)
+  .await?;
+  entry.clear();
+  Ok(())
+}
+
 /// Insert log entries in batch mode (efficient for large inserts)
 ///
 /// `entries` will be cleared
-pub async fn insert_soa(executor: impl sqlx::PgExecutor<'_> + Copy, entry: &mut SOAEntry) -> Result<()> {
+pub async fn insert_soa_slow(
+  executor: impl sqlx::PgExecutor<'_> + Copy,
+  entry: &mut SOAEntry<String, i32>,
+) -> Result<()> {
   // Bulk insert the chatters
-  users::create_bulk(executor, &entry.chatter).await?;
+  sqlx::query(
+    "
+    INSERT INTO twitch_user (username)
+	    SELECT * FROM UNNEST($1)
+    ON CONFLICT (username) DO NOTHING;
+    ",
+  )
+  .bind(&entry.chatter)
+  .execute(executor)
+  .await?;
 
   // Then complete the insert into logs by joining chatters with twitch_user
   sqlx::query(
@@ -127,6 +266,25 @@ pub async fn insert_soa(executor: impl sqlx::PgExecutor<'_> + Copy, entry: &mut 
       FROM raw_logs rl
       JOIN twitch_user tw ON tw.username = rl.chatter
     ) as joined;
+    ",
+  )
+  .bind(&entry.channel)
+  .bind(&entry.chatter)
+  .bind(&entry.sent_at)
+  .bind(&entry.message)
+  .execute(executor)
+  .await?;
+
+  entry.clear();
+
+  Ok(())
+}
+
+/// Insert log entries where the channels and chatters have already been resolved in batch mode
+pub async fn insert_soa_resolved(executor: impl sqlx::PgExecutor<'_> + Copy, entry: &mut SOAEntry<i32>) -> Result<()> {
+  sqlx::query(
+    "
+      INSERT INTO twitch_logs (channel, chatter, sent_at, message) SELECT * FROM UNNEST($1, $2, $3, $4);
     ",
   )
   .bind(&entry.channel)
@@ -222,6 +380,7 @@ pub async fn fetch_logs_paged_with_usernames<S: Into<String>>(
   limit: i32,
   cursor: Option<(i64, DateTime<Utc>)>,
 ) -> Result<Vec<Entry<String>>> {
+  assert!(limit > 0);
   let mut query;
   let query = get_paged_query!(
     query,
@@ -236,7 +395,7 @@ pub async fn fetch_logs_paged_with_usernames<S: Into<String>>(
 }
 
 /// Retrieve logs into a `Vec`
-///f
+///
 /// * channel - exact
 /// * chatter - exact
 /// * pattern - uses `LIKE` for matching, e.g. `%yo%`
@@ -250,6 +409,7 @@ pub async fn fetch_logs_paged<S: Into<String>>(
   limit: i32,
   cursor: Option<(i64, DateTime<Utc>)>,
 ) -> Result<Vec<Entry<i32>>> {
+  assert!(limit > 0);
   let mut query;
   let query = get_paged_query!(
     query,

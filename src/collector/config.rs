@@ -3,7 +3,12 @@ use serde::Deserialize;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+#[cfg(target_family = "windows")]
 const DEFAULT_OUTPUT_DIRECTORY: &str = concat!(env!("CARGO_MANIFEST_DIR"), "\\logs");
+
+#[cfg(target_family = "unix")]
+const DEFAULT_OUTPUT_DIRECTORY: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/logs");
+
 const DEFAULT_BUF_SIZE: usize = 1024; // 1 KiB
 
 fn default_output_directory() -> std::path::PathBuf {
@@ -19,8 +24,8 @@ fn default_output_directory() -> std::path::PathBuf {
 #[derive(Deserialize)]
 #[serde(untagged)]
 pub enum TempChannel {
-  NameOnly(String),
-  Buffered { name: String, buffer: usize },
+  NameOnly(ingest::SmolStr),
+  Buffered { name: ingest::SmolStr, buffer: usize },
 }
 
 #[derive(Deserialize)]
@@ -37,27 +42,21 @@ pub struct TwitchLogin {
   pub token: String,
 }
 
-#[derive(Clone, Debug)]
-pub struct Channel {
-  pub name: String,
-  pub buffer: usize,
-}
-
-impl From<TempChannel> for Channel {
-  fn from(c: TempChannel) -> Self {
-    match c {
-      TempChannel::NameOnly(name) => Self {
+impl From<TempChannel> for ingest::fs::Channel {
+  fn from(val: TempChannel) -> Self {
+    match val {
+      TempChannel::NameOnly(name) => ingest::fs::Channel {
         name,
         buffer: DEFAULT_BUF_SIZE,
       },
-      TempChannel::Buffered { name, buffer } => Self { name, buffer },
+      TempChannel::Buffered { name, buffer } => ingest::fs::Channel { name, buffer },
     }
   }
 }
 
 #[derive(Clone, Debug)]
 pub struct Config {
-  pub channels: Vec<Channel>,
+  pub channels: Vec<ingest::fs::Channel>,
   pub output_directory: PathBuf,
   pub credentials: Option<TwitchLogin>,
 }
@@ -70,7 +69,7 @@ impl From<TempConfig> for Config {
       credentials,
     } = c;
     Self {
-      channels: channels.into_iter().map(Channel::from).collect(),
+      channels: channels.into_iter().map(Into::into).collect(),
       output_directory,
       credentials,
     }
