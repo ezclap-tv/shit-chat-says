@@ -6,7 +6,7 @@ use tokio_tungstenite::tungstenite::Message;
 use twitch::Command;
 
 use config::Config;
-use ingest::{fs::FileSystemSink, SinkManager};
+use ingest::{fs::FileSystemSink, pg::PostgresSink, SinkManager};
 use twitch_api::SuggestedAction;
 
 pub mod config;
@@ -29,11 +29,21 @@ async fn stop_signal() -> std::io::Result<()> {
 }
 
 async fn run(config: Config) -> Result<()> {
+  let db_url = std::env::var("SCS_DATABASE_URL").expect("need db url");
+  log::info!("Connecting to {}", db_url);
+  let db = db::connect(db_url).await?;
+
   let creds = twitch_api::Credentials::from(&config);
   let channel_names = config.channels.iter().map(|c| c.name.to_string()).collect::<Vec<_>>();
   let (mut manager, sender) =
     SinkManager::new(1024, Duration::from_secs(120)).expect("Failed to register stop signals");
+
   manager.add_sink(FileSystemSink::new(config.channels.clone(), &config.output_directory).await?);
+  manager.add_sink(PostgresSink::new(
+    db,
+    config.channels.iter().map(|c| c.buffer).max().unwrap_or(1024),
+    ingest::pg::TargetTable::IndexedLogs,
+  ));
 
   'stop: loop {
     log::info!("Connecting to Twitch");
@@ -85,8 +95,13 @@ async fn handle_messages(
 ) -> std::result::Result<(), twitch_api::WsError> {
   let all_messages = batch
     .lines()
-    .map(twitch::Message::parse)
-    .filter_map(Result::ok)
+    .filter_map(|r| match twitch::Message::parse(r) {
+      Ok(msg) => Some(msg),
+      Err(e) => {
+        log::error!("Failed to parse message: {:?}\nOriginal message: {}\n", e, r);
+        None
+      }
+    })
     .collect::<Vec<_>>();
 
   // Process all the text messages first
@@ -120,6 +135,7 @@ async fn handle_messages(
     .into_iter()
     .filter(|msg| !matches!(msg.command(), Command::Privmsg))
   {
+    log::debug!("Handling command: {}", twitch_msg.command());
     match twitch_msg.command() {
       Command::Ping => conn.pong().await?,
       Command::Reconnect => conn.reconnect(creds, channels).await?,

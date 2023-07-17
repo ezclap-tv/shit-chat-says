@@ -4,19 +4,14 @@ use std::{
   path::{Path, PathBuf},
 };
 
+use anyhow::Context;
 use async_trait::async_trait;
 use chrono::Utc;
 use db::sqlx::types::chrono::DateTime;
 use smol_str::SmolStr;
 use tokio::io::{AsyncWriteExt, BufWriter};
 
-use crate::sink::SinkError;
-
-#[derive(Clone, Debug)]
-pub struct Channel {
-  pub name: SmolStr,
-  pub buffer: usize,
-}
+use crate::{sink::SinkError, Channel};
 
 pub struct FileSystemSink {
   scratchpad: HashMap<SmolStr, Vec<u8>>,
@@ -43,7 +38,7 @@ impl FileSystemSink {
     Ok(Self { sinks, scratchpad })
   }
 
-  fn report_and_return_last_error(results: Vec<Result<(), tokio::io::Error>>) -> Result<(), SinkError> {
+  fn report_and_return_last_error(results: Vec<Result<(), anyhow::Error>>) -> Result<(), SinkError> {
     let mut last_error = None;
     for r in results {
       if let Err(e) = r {
@@ -51,7 +46,7 @@ impl FileSystemSink {
         last_error = Some(e);
       }
     }
-    last_error.map_or(Ok(()), |e| Err(SinkError::Io(e)))
+    last_error.map_or(Ok(()), |e| Err(SinkError::from(e)))
   }
 }
 
@@ -106,6 +101,7 @@ impl crate::Sink for FileSystemSink {
 }
 
 /// File sink which writes to a new file for each day
+#[derive(Debug)]
 pub struct DailyLogSink {
   log_file_prefix: SmolStr,
   log_dir: PathBuf,
@@ -113,17 +109,19 @@ pub struct DailyLogSink {
   file: BufWriter<tokio::fs::File>,
 }
 
-async fn open_log_file(dir: &Path, prefix: &str) -> tokio::io::Result<tokio::fs::File> {
+async fn open_log_file(dir: &Path, prefix: &str) -> anyhow::Result<tokio::fs::File> {
   let date = Utc::now().format("%F");
+  let log_file_path = dir.join(format!("{prefix}-{date}.log"));
   tokio::fs::OpenOptions::new()
     .create(true)
     .append(true)
-    .open(dir.join(format!("{prefix}-{date}.log")))
+    .open(&log_file_path)
     .await
+    .with_context(|| format!("Error while opening log file for {}", log_file_path.display()))
 }
 
 impl DailyLogSink {
-  pub async fn new(log_dir: &Path, log_file_prefix: SmolStr, buf_size: usize) -> tokio::io::Result<Self> {
+  pub async fn new(log_dir: &Path, log_file_prefix: SmolStr, buf_size: usize) -> anyhow::Result<Self> {
     let log_dir = log_dir.join(log_file_prefix.as_str());
     if !log_dir.exists() {
       tokio::fs::create_dir_all(&log_dir).await?;
@@ -141,7 +139,7 @@ impl DailyLogSink {
     })
   }
 
-  pub async fn write(&mut self, buf: &[u8]) -> tokio::io::Result<()> {
+  pub async fn write(&mut self, buf: &[u8]) -> anyhow::Result<()> {
     // rotate file every day
     let today = Utc::now();
     if today.signed_duration_since(self.date).num_days() > 0 {
@@ -150,10 +148,12 @@ impl DailyLogSink {
       *self.file.get_mut() = open_log_file(&self.log_dir, &self.log_file_prefix).await?;
     }
     // then actually write
-    self.file.write_all(buf).await
+    self.file.write_all(buf).await?;
+    Ok(())
   }
 
-  pub async fn flush(&mut self) -> tokio::io::Result<()> {
-    self.file.flush().await
+  pub async fn flush(&mut self) -> anyhow::Result<()> {
+    self.file.flush().await?;
+    Ok(())
   }
 }

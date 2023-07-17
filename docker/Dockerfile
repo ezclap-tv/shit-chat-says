@@ -26,6 +26,7 @@ COPY ./Cargo.toml            $HOME/app/Cargo.toml
 COPY ./src                   $HOME/app/src
 COPY ./scs-db                $HOME/app/scs-db
 COPY ./scs-chain             $HOME/app/scs-chain
+COPY ./scs-ingest            $HOME/app/scs-ingest
 COPY ./scs-user-api          $HOME/app/scs-user-api
 COPY ./scs-manage-api        $HOME/app/scs-manage-api
 RUN cargo chef prepare --recipe-path "$HOME/app/recipe.json"
@@ -42,6 +43,7 @@ COPY ./Cargo.toml            $HOME/app/Cargo.toml
 COPY ./src                   $HOME/app/src
 COPY ./scs-db                $HOME/app/scs-db
 COPY ./scs-chain             $HOME/app/scs-chain
+COPY ./scs-ingest            $HOME/app/scs-ingest
 COPY ./scs-user-api          $HOME/app/scs-user-api
 COPY ./scs-manage-api        $HOME/app/scs-manage-api
 RUN cargo build --workspace --release && \

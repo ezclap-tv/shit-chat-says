@@ -89,15 +89,45 @@ impl TwitchStream {
   }
 
   pub async fn receive(&mut self) -> Result<Option<Message>, WsError> {
-    tokio::select! {
+    const INITIAL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+    const MAX_BACKOFF: usize = 3;
+
+    let mut result = tokio::select! {
       msg = self.channel.1.recv() => {
         if let Some((index, batch)) = msg {
           log::info!("[JOIN] Received JOIN batch #{}", index + 1);
           self.join_batch(&batch).await?;
         }
-        self.ws.next().await.transpose()
+        tokio::time::timeout(INITIAL_TIMEOUT, self.ws.next()).await
       },
-      msg = self.ws.next() => msg.transpose(),
+      result = tokio::time::timeout(INITIAL_TIMEOUT, self.ws.next()) => result
+    };
+
+    let mut backoff = 0;
+    let mut timeout = INITIAL_TIMEOUT * 2;
+    while result.is_err() {
+      timeout *= 2;
+
+      log::warn!(
+        "[{}] Read timeout. Re-attempting with an increased value ({}s)",
+        backoff + 1,
+        timeout.as_secs()
+      );
+
+      result = tokio::time::timeout(timeout, self.ws.next()).await;
+
+      backoff += 1;
+      if backoff >= MAX_BACKOFF {
+        break;
+      }
+    }
+
+    match result {
+      Ok(ok) => ok.transpose(),
+      Err(_) => {
+        log::error!("All read attempts timed out. Acting like the stream was closed.");
+        Ok(None)
+      }
     }
   }
 
@@ -148,7 +178,9 @@ impl TwitchStream {
   }
 
   async fn send(&mut self, msg: impl Into<String>) -> Result<(), WsError> {
-    self.ws.send(Message::Text(msg.into())).await
+    let msg = msg.into();
+    log::debug!("> {}", msg);
+    self.ws.send(Message::Text(msg)).await
   }
 }
 

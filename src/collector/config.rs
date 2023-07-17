@@ -1,4 +1,5 @@
 use anyhow::Result;
+use ingest::Channel;
 use serde::Deserialize;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -42,21 +43,21 @@ pub struct TwitchLogin {
   pub token: String,
 }
 
-impl From<TempChannel> for ingest::fs::Channel {
+impl From<TempChannel> for Channel {
   fn from(val: TempChannel) -> Self {
     match val {
-      TempChannel::NameOnly(name) => ingest::fs::Channel {
+      TempChannel::NameOnly(name) => Channel {
         name,
         buffer: DEFAULT_BUF_SIZE,
       },
-      TempChannel::Buffered { name, buffer } => ingest::fs::Channel { name, buffer },
+      TempChannel::Buffered { name, buffer } => Channel { name, buffer },
     }
   }
 }
 
 #[derive(Clone, Debug)]
 pub struct Config {
-  pub channels: Vec<ingest::fs::Channel>,
+  pub channels: Vec<Channel>,
   pub output_directory: PathBuf,
   pub credentials: Option<TwitchLogin>,
 }

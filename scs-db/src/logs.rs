@@ -2,6 +2,8 @@ use super::Result;
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 
+pub type Cursor = (i64, DateTime<Utc>);
+
 #[derive(Debug, sqlx::FromRow, Serialize)]
 pub struct TwitchUser {
   id: i32,
@@ -62,9 +64,9 @@ impl<U, C> SOAEntry<U, C> {
 pub type ResolvedLogRecord = Entry<i32>;
 
 #[derive(Debug, sqlx::FromRow, Serialize)]
-pub struct Entry<U> {
+pub struct Entry<U, C = U> {
   pub id: i64,
-  pub channel: U,
+  pub channel: C,
   pub chatter: U,
   pub sent_at: DateTime<Utc>,
   pub message: String,
@@ -85,8 +87,8 @@ where
   }
 }
 
-impl<U> Entry<U> {
-  pub fn new(channel: U, chatter: U, sent_at: DateTime<Utc>, message: String) -> Self {
+impl<U, C> Entry<U, C> {
+  pub fn new(channel: C, chatter: U, sent_at: DateTime<Utc>, message: String) -> Self {
     Entry {
       id: -1,
       channel,
@@ -107,7 +109,7 @@ impl<U> Entry<U> {
   }
 
   #[inline]
-  pub fn channel(&self) -> &U {
+  pub fn channel(&self) -> &C {
     &self.channel
   }
 
@@ -218,8 +220,8 @@ pub async fn insert_one(executor: impl sqlx::PgExecutor<'_> + Copy, entry: &Entr
 pub async fn insert_soa_raw(
   executor: impl sqlx::PgExecutor<'_> + Copy,
   entry: &mut SOAEntry<String, String>,
-) -> Result<()> {
-  sqlx::query(
+) -> Result<u64> {
+  let rows = sqlx::query(
     "
   INSERT INTO raw_logs(channel, chatter, sent_at, message) SELECT * FROM UNNEST($1, $2, $3, $4);",
   )
@@ -228,15 +230,16 @@ pub async fn insert_soa_raw(
   .bind(&entry.sent_at)
   .bind(&entry.message)
   .execute(executor)
-  .await?;
+  .await?
+  .rows_affected();
   entry.clear();
-  Ok(())
+  Ok(rows)
 }
 
-/// Insert log entries in batch mode (efficient for large inserts)
+/// Insert log entries in batch mode, with the channels already resolved to their ids.
 ///
 /// `entries` will be cleared
-pub async fn insert_soa_slow(
+pub async fn insert_soa_resolved_channel(
   executor: impl sqlx::PgExecutor<'_> + Copy,
   entry: &mut SOAEntry<String, i32>,
 ) -> Result<()> {
@@ -244,7 +247,7 @@ pub async fn insert_soa_slow(
   sqlx::query(
     "
     INSERT INTO twitch_user (username)
-	    SELECT * FROM UNNEST($1)
+	    SELECT DISTINCT * FROM UNNEST($1)
     ON CONFLICT (username) DO NOTHING;
     ",
   )
@@ -278,6 +281,64 @@ pub async fn insert_soa_slow(
   entry.clear();
 
   Ok(())
+}
+
+pub async fn insert_soa_slow(
+  executor: impl sqlx::PgExecutor<'_> + Copy,
+  entry: &mut SOAEntry<String, String>,
+) -> Result<u64> {
+  // Bulk insert the channels
+  sqlx::query(
+    "
+      INSERT INTO twitch_user (username)
+        SELECT DISTINCT * FROM UNNEST($1)
+      ON CONFLICT (username) DO NOTHING;
+      ",
+  )
+  .bind(&entry.channel)
+  .execute(executor)
+  .await?;
+
+  // Bulk insert the chatters
+  sqlx::query(
+    "
+    INSERT INTO twitch_user (username)
+	    SELECT DISTINCT * FROM UNNEST($1)
+    ON CONFLICT (username) DO NOTHING;
+    ",
+  )
+  .bind(&entry.chatter)
+  .execute(executor)
+  .await?;
+
+  // Then complete the insert into logs by joining chatters and channels with twitch_user
+  let rows = sqlx::query(
+    "
+    WITH raw_logs AS (
+      SELECT * 
+      FROM UNNEST($1, $2, $3, $4) 
+      soa_entry(channel, chatter, sent_at, message)
+    ) 
+    INSERT INTO twitch_logs (channel, chatter, sent_at, message)
+    SELECT * FROM (
+      SELECT channels.id, chatters.id chatter, rl.sent_at, rl.message
+      FROM raw_logs rl
+      JOIN twitch_user channels ON channels.username = rl.channel
+      JOIN twitch_user chatters ON chatters.username = rl.chatter
+    ) as joined;
+    ",
+  )
+  .bind(&entry.channel)
+  .bind(&entry.chatter)
+  .bind(&entry.sent_at)
+  .bind(&entry.message)
+  .execute(executor)
+  .await?
+  .rows_affected();
+
+  entry.clear();
+
+  Ok(rows)
 }
 
 /// Insert log entries where the channels and chatters have already been resolved in batch mode

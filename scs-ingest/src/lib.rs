@@ -9,12 +9,19 @@ use std::{
 use futures::FutureExt;
 
 pub mod fs;
+pub mod pg;
 pub mod sink;
 
 pub use db::logs::Entry;
 pub use smol_str::SmolStr;
 
 use sink::{MessageReceiver, MessageSender, RawLogRecord, Sink, SinkMessage};
+
+#[derive(Clone, Debug)]
+pub struct Channel {
+  pub name: SmolStr,
+  pub buffer: usize,
+}
 
 #[derive(thiserror::Error, Debug)]
 #[error("Failed to register handler for all of the OS signals. Odd.")]
