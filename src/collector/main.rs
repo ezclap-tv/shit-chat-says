@@ -1,19 +1,15 @@
-use std::collections::HashMap;
 use std::env;
-use std::io::Write;
+use std::time::Duration;
 
 use anyhow::Result;
 use tokio_tungstenite::tungstenite::Message;
 use twitch::Command;
 
 use config::Config;
+use ingest::{fs::FileSystemSink, pg::PostgresSink, SinkManager};
 use twitch_api::SuggestedAction;
 
 pub mod config;
-pub mod sink;
-
-use sink::DailyLogSink;
-// TODO: handle TMI restarts + disconnections with retry
 
 #[cfg(target_family = "windows")]
 use tokio::signal::ctrl_c as stop_signal;
@@ -33,21 +29,25 @@ async fn stop_signal() -> std::io::Result<()> {
 }
 
 async fn run(config: Config) -> Result<()> {
+  let db_url = std::env::var("SCS_DATABASE_URL").expect("need db url");
+  log::info!("Connecting to {}", db_url);
+  let db = db::connect(db_url).await?;
+
+  let creds = twitch_api::Credentials::from(&config);
+  let channel_names = config.channels.iter().map(|c| c.name.to_string()).collect::<Vec<_>>();
+  let (mut manager, sender) =
+    SinkManager::new(1024, Duration::from_secs(120)).expect("Failed to register stop signals");
+
+  manager.add_sink(FileSystemSink::new(config.channels.clone(), &config.output_directory).await?);
+  manager.add_sink(PostgresSink::new(
+    db,
+    config.channels.iter().map(|c| c.buffer).max().unwrap_or(1024),
+    ingest::pg::TargetTable::IndexedLogs,
+  ));
+
   'stop: loop {
     log::info!("Connecting to Twitch");
     let mut conn = twitch_api::TwitchStream::new().await?;
-    let creds = twitch_api::Credentials::from(&config);
-    let channel_names = config.channels.iter().map(|c| c.name.clone()).collect::<Vec<_>>();
-
-    // one sink per channel
-    let mut sinks = HashMap::<String, sink::DailyLogSink>::with_capacity(config.channels.len());
-    for channel in config.channels.iter() {
-      log::info!("Initializing sink for {}", channel.name);
-      sinks.insert(
-        channel.name.clone(),
-        sink::DailyLogSink::new(config.output_directory.clone(), channel.name.clone(), channel.buffer)?,
-      );
-    }
 
     conn.authenticate(&creds).await?;
     conn.schedule_joins(&channel_names);
@@ -57,14 +57,12 @@ async fn run(config: Config) -> Result<()> {
       let error = tokio::select! {
           _ = stop_signal() => {
             log::info!("Process terminated");
-            for sink in sinks.values_mut() {
-              sink.flush()?;
-            }
+            manager.stop().await;
             break 'stop;
           },
           result = conn.receive() => match result {
             Ok(Some(message)) => if let Message::Text(batch) = message {
-              handle_messages(&mut conn, &creds, &channel_names, &mut sinks, batch).await
+              handle_messages(&mut conn, &creds, &channel_names, &sender, batch).await
             } else {
               Ok(())
             },
@@ -83,10 +81,6 @@ async fn run(config: Config) -> Result<()> {
         }
       }
     }
-
-    for sink in sinks.values_mut() {
-      sink.flush()?;
-    }
   }
 
   Ok(())
@@ -96,16 +90,22 @@ async fn handle_messages(
   conn: &mut twitch_api::TwitchStream,
   creds: &twitch_api::Credentials,
   channels: &[String],
-  sinks: &mut HashMap<String, DailyLogSink>,
+  sender: &ingest::BatchSender,
   batch: String,
 ) -> std::result::Result<(), twitch_api::WsError> {
   let all_messages = batch
     .lines()
-    .map(twitch::Message::parse)
-    .filter_map(Result::ok)
+    .filter_map(|r| match twitch::Message::parse(r) {
+      Ok(msg) => Some(msg),
+      Err(e) => {
+        log::error!("Failed to parse message: {:?}\nOriginal message: {}\n", e, r);
+        None
+      }
+    })
     .collect::<Vec<_>>();
 
   // Process all the text messages first
+  let mut batch = Vec::new();
   for twitch_msg in all_messages
     .iter()
     .filter(|msg| matches!(msg.command(), Command::Privmsg))
@@ -116,17 +116,26 @@ async fn handle_messages(
 
     if let (Some(channel), Some(login), Some(text)) = (channel, login, text) {
       log::info!("[{channel}] {login}: {text}");
-      let mut sink = sinks.get_mut(channel).unwrap();
-      write!(&mut sink, "{login},{text}\n")?;
+      batch.push(ingest::sink::RawLogRecord::new(
+        channel.into(),
+        login.into(),
+        chrono::Utc::now(),
+        text.trim_end_matches(['\n', ' ', '\t', 'r', '\u{e0000}']).to_owned(),
+      ));
     } else {
       log::warn!("Invalid message: {twitch_msg:?}");
     }
+  }
+
+  if !batch.is_empty() {
+    sender.broadcast(batch);
   }
 
   for twitch_msg in all_messages
     .into_iter()
     .filter(|msg| !matches!(msg.command(), Command::Privmsg))
   {
+    log::debug!("Handling command: {}", twitch_msg.command());
     match twitch_msg.command() {
       Command::Ping => conn.pong().await?,
       Command::Reconnect => conn.reconnect(creds, channels).await?,

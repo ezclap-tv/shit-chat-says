@@ -1,28 +1,25 @@
 use anyhow::Result;
-use regex::Regex;
+
 use std::{
-  env, fs,
+  env,
+  num::NonZeroUsize,
   path::{Path, PathBuf},
 };
+
 use structopt::StructOpt;
 use walkdir::{DirEntry, WalkDir};
+
+mod parsing;
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "ingest", about = "Ingest Chatterino logs into a pgsql database")]
 struct Options {
-  #[structopt(short, long, env = "INGEST_DB_URI")]
+  #[structopt(short, long, env = "SCS_DATABASE_URL")]
   uri: String,
-  #[structopt(short, long, env = "INGEST_LOGS_DIR", parse(from_os_str))]
+  #[structopt(short, long, env = "SCS_LOGS_DIR", parse(from_os_str))]
   logs: PathBuf,
-}
-
-fn parse_known_tz_offset(tz: &str) -> Result<&'static str> {
-  Ok(match tz {
-    "EDT" => "-0400",
-    "EST" => "-0500",
-    "UTC" => "+0000",
-    _ => anyhow::bail!("Encountered unknown timezone: {}", tz),
-  })
+  #[structopt(short, long, default_value = "6")]
+  threads: NonZeroUsize,
 }
 
 fn walk_logs(dir: impl AsRef<Path>) -> impl Iterator<Item = (String, String, DirEntry)> {
@@ -40,6 +37,58 @@ fn walk_logs(dir: impl AsRef<Path>) -> impl Iterator<Item = (String, String, Dir
     })
 }
 
+const MIN_BATCH_SIZE_TO_INSERT: usize = 400_000;
+type LogFileMsg = (String, String, walkdir::DirEntry);
+
+fn worker_thread(wid: usize, db: db::Database, rx: crossbeam_channel::Receiver<LogFileMsg>) -> Result<usize> {
+  let runtime = tokio::runtime::Handle::current();
+  runtime.block_on(async move {
+    log::info!("[WORKER:{wid}] Listening for messages...");
+    let mut cache = ahash::AHashMap::with_capacity(10); // set this to 1 million if the cache is used as the main username resolution strategy
+    let mut soa_entry = db::logs::SOAEntry::new(400_000); // 56 bytes each * 400,000 = 20MB
+
+    while let Ok((channel, date, entry)) = rx.recv() {
+      let path = entry.path().display().to_string();
+      log::info!("[WORKER:{wid}] Parsing {}", path);
+
+      let channel_id = db::channels::get_or_create_channel(&db, &channel, true, &mut cache).await?;
+      if let Err(e) = parsing::process_log_file(wid, &mut soa_entry, channel_id, channel, date, entry) {
+        log::warn!("[WORKER:{wid}] Failed to process {path}: {e}");
+      }
+
+      log::info!("[WORKER:{wid}] Finished parsing {path}");
+
+      let size = soa_entry.size();
+      if size > MIN_BATCH_SIZE_TO_INSERT {
+        const LINES_PER_SECOND: usize = 10_000;
+        let instant = std::time::Instant::now();
+        log::info!(
+          "[WORKER:{wid}] Inserting {size} logs. This may take a while - estimating {:.3}s.",
+          (size as f64 / LINES_PER_SECOND as f64)
+        );
+        db::logs::insert_soa_resolved_channel(&db, &mut soa_entry).await?;
+        log::info!(
+          "[WORKER:{wid}] {} logs inserted in {:.4}s",
+          size,
+          instant.elapsed().as_secs_f64()
+        );
+      }
+    }
+
+    log::info!("[WORKER:{wid}] Worker loop terminated. Inserting remaining logs.");
+    let size = soa_entry.size();
+    let instant = std::time::Instant::now();
+    db::logs::insert_soa_resolved_channel(&db, &mut soa_entry).await?;
+    log::info!(
+      "[WORKER:{wid}] {} logs inserted in {:.4}s",
+      size,
+      instant.elapsed().as_secs_f64()
+    );
+
+    Ok(wid)
+  })
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
   if env::var("RUST_LOG").is_err() {
@@ -52,55 +101,43 @@ async fn main() -> Result<()> {
   log::info!("Connecting to {}", opts.uri);
   let db = db::connect(opts.uri).await?;
 
+  log::info!("Using {} worker thread(s)", opts.threads);
+  let (tx, rx) = crossbeam_channel::bounded(opts.threads.get() * 4);
+  let workers = (0..opts.threads.get())
+    .map(|id| {
+      let rx = rx.clone();
+      let db = db.clone();
+      tokio::task::spawn_blocking(move || worker_thread(id + 1, db, rx))
+    })
+    .collect::<Vec<_>>();
+
+  // We want the main loop to exit as soon as all worker threads die, so we need to make sure
+  // that the number of receivers is exactly the same as the number of worker threads. Without
+  // dropping this one, the program will deadlock on errors.
+  std::mem::drop(rx);
+
   log::info!("Reading logs from {}", opts.logs.display());
-  let tz_re = Regex::new(r"# Start logging at \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} (\w+)")?;
-  let msg_re = Regex::new(r"\[(\d{2}:\d{2}:\d{2})\]  (\w+): (.*)")?;
-
-  // NOTE: The channel name queries are going to slow this done somewhat, but it shouldn't be too bad.
-  // If this turns out to be a problem, we can run this on a thread pool with each log line spawned as a task.
-  let mut cache = ahash::AHashMap::with_capacity(10); // set this to 1 million if the cache is used as the main username resolution strategy
-  let mut soa_entry = db::logs::SOAEntry::new(2_000_000); // 56 bytes each * 2,000,000 = 100MB
   for (channel, date, entry) in walk_logs(opts.logs) {
-    let channel_id = db::channels::get_or_create_channel(&db, &channel, true, &mut cache).await?;
+    if let Err(e) = tx.send((channel, date, entry)) {
+      log::error!("All worker threads appear to be dead: {e}. Exiting.");
+      break;
+    }
+  }
 
-    let instant = std::time::Instant::now();
-    log::info!("{} {} {} (collect started)", channel, date, entry.path().display());
-    let mut file_tz_offset = "+0000";
-    let content = fs::read_to_string(entry.path())?;
-    for line in content.split('\n') {
-      if let Some(timezone) = tz_re.captures(line).and_then(|v| v.get(1).map(|v| v.as_str())) {
-        file_tz_offset = parse_known_tz_offset(timezone)?;
-      } else if let Some((time, chatter, message)) = msg_re
-        .captures(line)
-        .and_then(|v| Some((v.get(1)?.as_str(), v.get(2)?.as_str(), v.get(3)?.as_str())))
-      {
-        let chatter = chatter.to_owned();
-        // format options: https://docs.rs/chrono/latest/chrono/format/strftime/index.html
-        let sent_at = chrono::DateTime::parse_from_str(&format!("{date} {time} {file_tz_offset}"), "%F %T %z")?
-          .with_timezone(&chrono::Utc);
-        let message = message.to_string();
+  std::mem::drop(tx);
+  log::info!("Finished reading logs. Waiting for workers to finish.");
 
-        soa_entry.add(channel_id, chatter, sent_at, message);
+  for w in workers {
+    match w.await {
+      Ok(Ok(wid)) => log::info!("Worker thread {} exited successfully", wid),
+      Ok(Err(e)) => {
+        log::error!("Worker thread exited with an error: {e}");
+      }
+      Err(e) => {
+        log::error!("Worker thread failed to exit gracefully: {e}");
       }
     }
-
-    log::info!(
-      "{} {} {} (collect finished in {:.4}s)",
-      channel,
-      date,
-      entry.path().display(),
-      instant.elapsed().as_secs_f64()
-    );
-
-    db::logs::insert_soa(&db, &mut soa_entry).await?;
-
-    log::info!(
-      "{} {} {} (file inserted in {:.4}s)\n",
-      channel,
-      date,
-      entry.path().display(),
-      instant.elapsed().as_secs_f64()
-    );
   }
+
   Ok(())
 }

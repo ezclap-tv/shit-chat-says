@@ -14,7 +14,11 @@ path = "src/lib.rs"
 [dependencies]
 actix = "0.13.0"
 actix-web = "4.3.1"
-sqlx = { version = "0.6.3", features = ["postgres", "chrono", "runtime-actix-rustls"] }
+sqlx = { version = "0.6.3", features = [
+  "postgres",
+  "chrono",
+  "runtime-actix-rustls",
+] }
 log = "0.4.19"
 chrono = { version = "0.4.26", features = ["serde"] }
 futures = "0.3.28"
@@ -22,6 +26,8 @@ serde = { version = "1.0.164", features = ["derive"] }
 ahash = "0.8.3"
 getset = "0.1.2"
 base64 = "0.21.2"
+meilisearch-sdk = "0.24.1"
+
 
 [dev-dependencies]
 env_logger = "0.10.0"

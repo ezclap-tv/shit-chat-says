@@ -29,8 +29,7 @@ CREATE TABLE twitch_logs (
 
   sent_at TIMESTAMPTZ NOT NULL,
 
-  -- Twitch UI enforces 500 character limit (TOOD: might bump this later on if we decide to support other log sources)
-  message VARCHAR(500) NOT NULL
+  message TEXT NOT NULL
 );
 
 CREATE TABLE twitch_logs_metadata(
